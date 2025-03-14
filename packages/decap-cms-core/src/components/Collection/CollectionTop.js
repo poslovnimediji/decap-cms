@@ -77,8 +77,10 @@ function CollectionTop({ collection, newEntryUrl, t }) {
 
   function handleNew(pathType) {
     const delimiter = newEntryUrl.includes('?') ? '&' : '?';
-    history.push(`${newEntryUrl}${delimiter}path_type=${pathType}`)
+    history.push(`${newEntryUrl}${delimiter}path_type=${pathType}`);
   }
+
+  // TODO: find some nice names for the path types, translate and consolidate
 
   return (
     <CollectionTopContainer>
@@ -97,8 +99,8 @@ function CollectionTop({ collection, newEntryUrl, t }) {
             dropdownWidth="160px"
             dropdownPosition="left"
           >
-            <DropdownItem key={'_index'} label={`Index page`} onClick={() => handleNew('index')} />
-            <DropdownItem key={'{{slug}}'} label={'Leaf page'} onClick={() => handleNew('slug')} />
+            <DropdownItem key={'_index'} label={`Razdelilna stran`} onClick={() => handleNew('index')} />
+            <DropdownItem key={'{{slug}}'} label={'Vsebinska stran'} onClick={() => handleNew('slug')} />
           </Dropdown>
         ) : newEntryUrl ? (
           <CollectionTopNewButton to={newEntryUrl}>
