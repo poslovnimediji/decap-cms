@@ -26,6 +26,7 @@ if (typeof window !== 'undefined') {
   if (typeof DECAP_CMS_VERSION === 'string') {
     console.log(`decap-cms ${DECAP_CMS_VERSION}`);
   }
+  console.log(`decap-cms-app testbranch`);
 }
 
 export const DecapCms = {
