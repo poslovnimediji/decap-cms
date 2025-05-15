@@ -184,9 +184,11 @@ class Header extends React.Component {
         <AppHeaderContent>
           <nav>
             <AppHeaderNavList>
-              {logoUrl && <AppHeaderLogo>
-                <img src={logoUrl} alt="Logo" />
-              </AppHeaderLogo>}
+              {logoUrl && (
+                <AppHeaderLogo>
+                  <img src={logoUrl} alt="Logo" />
+                </AppHeaderLogo>
+              )}
               <li>
                 <AppHeaderNavLink
                   to="/"
