@@ -847,6 +847,7 @@ export class Backend {
         const pathArr = dirname(entryPath).split('/').slice(0, -1);
         pathArr.push(basename(entryPath));
         metaPath = pathArr.join('/');
+        console.log(`Meta path for index file '${entryPath}' is '${metaPath}'`);
       }
 
       let entry = createEntry(collection.get('name'), slug, entryPath, {
