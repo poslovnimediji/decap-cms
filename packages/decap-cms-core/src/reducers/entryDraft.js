@@ -31,9 +31,8 @@ import {
   UNPUBLISHED_ENTRY_PUBLISH_SUCCESS,
   UNPUBLISHED_ENTRY_PUBLISH_FAILURE,
 } from '../actions/editorialWorkflow';
-import { selectFolderEntryExtension, selectHasMetaPath } from './collections';
+import { isNestedSubfolders, selectFolderEntryExtension, selectHasMetaPath } from './collections';
 import { getDataPath, duplicateI18nFields } from '../lib/i18n';
-import { slugFormatter } from '../lib/formatters';
 
 const initialState = Map({
   entry: Map(),
@@ -205,7 +204,7 @@ function entryDraftReducer(state = Map(), action) {
   }
 }
 
-export function selectCustomPath(collection, entryDraft, config) {
+export function selectCustomPath(collection, entryDraft) {
   if (!selectHasMetaPath(collection)) {
     return;
   }
@@ -213,21 +212,17 @@ export function selectCustomPath(collection, entryDraft, config) {
   const path = meta && meta.get('path');
   const pathType = meta && meta.get('path_type', 'index');
   const indexFile = get(collection.toJS(), ['meta', 'path', 'index_file']);
-  const fileBaseName = slugFormatter(collection, entryDraft.getIn(['entry', 'data']), config.slug);
   const extension = selectFolderEntryExtension(collection);
-  const fileSlug = entryDraft.getIn(['entry', 'slug'])
-    ? entryDraft.getIn(['entry', 'slug']).split('/').pop()
-    : fileBaseName;
-  const customPath =
-    path &&
-    join(
-      collection.get('folder'),
-      path,
-      pathType == 'index'
-        ? `${fileBaseName}/${indexFile}.${extension}`
-        : `${fileSlug}.${extension}`,
-    );
-  return customPath;
+  const pathSegments = path ? path.split('/') : [];
+
+  let fileName = pathSegments.pop();
+  let filePath = pathSegments.join('/');
+  if (isNestedSubfolders(collection) || pathType === 'index') {
+    fileName = indexFile;
+    filePath = path;
+  }
+
+  return path && join(collection.get('folder'), filePath, `${fileName}.${extension}`);
 }
 
 export default entryDraftReducer;

@@ -28,6 +28,8 @@ import {
   selectMediaFolders,
   selectFieldsComments,
   selectHasMetaPath,
+  isNestedSubfolders,
+  isNested,
 } from './reducers/collections';
 import { createEntry } from './valueObjects/Entry';
 import { sanitizeChar } from './lib/urlHelper';
@@ -290,10 +292,20 @@ type Implementation = BackendImplementation & {
   init: (config: CmsConfig, options: ImplementationInitOptions) => Implementation;
 };
 
-function prepareMetaPath(path: string, collection: Collection) {
+function prepareMetaPath(path: string, collection: Collection, slug?: string) {
   if (!selectHasMetaPath(collection)) {
     return path;
   }
+
+  if (
+    slug &&
+    isNested(collection) &&
+    !isNestedSubfolders(collection) &&
+    prepareMetaPathType(slug, collection) !== 'index'
+  ) {
+    return slug;
+  }
+
   const dir = dirname(path);
   return dir.slice(collection.get('folder')!.length + 1) || '/';
 }
@@ -526,7 +538,13 @@ export class Backend {
           label: loadedEntry.file.label,
           author: loadedEntry.file.author,
           updatedOn: loadedEntry.file.updatedOn,
-          meta: { path: prepareMetaPath(loadedEntry.file.path, collection) },
+          meta: {
+            path: prepareMetaPath(
+              loadedEntry.file.path,
+              collection,
+              selectEntrySlug(collection, loadedEntry.file.path),
+            ),
+          },
         },
       ),
     );
@@ -753,7 +771,7 @@ export class Backend {
           raw,
           label,
           mediaFiles,
-          meta: { path: prepareMetaPath(path, collection) },
+          meta: { path: prepareMetaPath(path, collection, slug) },
         }),
       );
     };
@@ -840,22 +858,14 @@ export class Backend {
     const getEntryValue = async (path: string) => {
       const loadedEntry = await this.implementation.getEntry(path);
       const entryPath = loadedEntry.file.path;
-      const path_type = prepareMetaPathType(slug, collection);
-
-      let metaPath = entryPath;
-      if (path_type === 'index') {
-        const pathArr = dirname(entryPath).split('/').slice(0, -1);
-        pathArr.push(basename(entryPath));
-        metaPath = pathArr.join('/');
-      }
 
       let entry = createEntry(collection.get('name'), slug, entryPath, {
         raw: loadedEntry.data,
         label,
         mediaFiles: [],
         meta: {
-          path: prepareMetaPath(metaPath, collection),
-          path_type,
+          path: prepareMetaPath(entryPath, collection, slug),
+          path_type: prepareMetaPathType(slug, collection),
         },
       });
 
@@ -950,7 +960,10 @@ export class Backend {
         updatedOn: entryData.updatedAt,
         author: entryData.pullRequestAuthor,
         status: entryData.status,
-        meta: { path: prepareMetaPath(path, collection) },
+        meta: {
+          path: prepareMetaPath(path, collection, slug),
+          path_type: prepareMetaPathType(slug, collection),
+        },
       });
 
       const entryWithFormat = this.entryWithFormat(collection)(entry);
@@ -983,6 +996,9 @@ export class Backend {
       );
       entries = entries.filter(Boolean);
       const grouped = await groupEntries(collection, extension, entries as EntryValue[]);
+      if (grouped[0]?.srcSlug) {
+        grouped[0].slug = grouped[0].srcSlug;
+      }
       return grouped[0];
     } else {
       const entryWithFormat = await readAndFormatDataFile(dataFiles[0]);
@@ -1133,7 +1149,7 @@ export class Backend {
 
     const useWorkflow = selectUseWorkflow(config);
 
-    const customPath = selectCustomPath(collection, entryDraft, config);
+    const customPath = selectCustomPath(collection, entryDraft);
 
     let dataFile: DataFile;
 
@@ -1163,6 +1179,7 @@ export class Backend {
       const slug = entryDraft.getIn(['entry', 'slug']);
       isFolder = prepareMetaPathType(slug, collection) === 'index';
       const path = entryDraft.getIn(['entry', 'path']);
+
       dataFile = {
         path,
         // for workflow entries we refresh the slug on publish

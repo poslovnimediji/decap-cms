@@ -208,15 +208,19 @@ export function normalizeConfig(config: CmsConfig) {
 }
 
 function applyMetaFieldsToCollection(collection: CmsCollection, meta: CmsCollectionMeta) {
-  const metaFields = [
+  const metaFields: CmsFieldBase[] = [
     {
       name: 'path',
       meta: true,
       required: true,
       i18n: 'duplicate',
+      default: '/',
       ...meta!.path,
     } as CmsFieldMeta,
-    {
+  ];
+
+  if (collection.index_file) {
+    metaFields.push({
       name: 'path_type',
       meta: true,
       required: true,
@@ -226,8 +230,8 @@ function applyMetaFieldsToCollection(collection: CmsCollection, meta: CmsCollect
       label: 'Path type',
       options: ['index', 'slug'],
       default: 'slug',
-    } as CmsFieldBase & CmsFieldSelect,
-  ];
+    } as CmsFieldBase & CmsFieldSelect);
+  }
 
   collection.fields = [...metaFields, ...(collection.fields || [])];
 
@@ -293,6 +297,13 @@ export function applyDefaults(originalConfig: CmsConfig) {
 
       if (collection.fields) {
         collection.fields = setI18nDefaultsForFields(collection.fields, Boolean(collectionI18n));
+      }
+
+      if (collection.index_file?.fields) {
+        collection.index_file.fields = setI18nDefaultsForFields(
+          collection.index_file.fields,
+          Boolean(collectionI18n),
+        );
       }
 
       const { folder, files, view_filters, view_groups, meta } = collection;

@@ -84,6 +84,7 @@ export interface CmsFieldBase {
   public_folder?: string;
   comment?: string;
   condition?: Condition;
+  readonly?: boolean;
 }
 
 export interface CmsFieldBoolean {
