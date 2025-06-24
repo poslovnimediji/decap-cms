@@ -34,6 +34,7 @@ import type {
   ViewFilter,
   ViewGroup,
   Entry,
+  Entries,
 } from '../types/redux';
 import type { EntryValue } from '../valueObjects/Entry';
 import type { Backend } from '../backend';
@@ -389,7 +390,8 @@ export function draftDuplicateEntry(entry: EntryMap) {
     type: DRAFT_CREATE_DUPLICATE_FROM_ENTRY,
     payload: createEntry(entry.get('collection'), '', '', {
       data: entry.get('data'),
-      i18n: entry.get('i18n'),
+      meta: entry.get('meta').toJS(),
+      i18n: entry.get('i18n').toJS(),
       mediaFiles: entry.get('mediaFiles').toJS(),
     }),
   };
@@ -1009,6 +1011,19 @@ function getPathError(
   };
 }
 
+function getExistingEntry(
+  entries: Entries,
+  collection: Collection,
+  path: string,
+  path_type: string,
+) {
+  const customPath = selectCustomPath(collection, fromJS({ entry: { meta: { path, path_type } } }));
+  if (!customPath) {
+    return undefined;
+  }
+  return selectEntryByPath(entries, collection.get('name'), customPath);
+}
+
 export function validateMetaField(
   state: State,
   collection: Collection,
@@ -1029,16 +1044,9 @@ export function validateMetaField(
       return getPathError(value, 'invalidPath', t);
     }
 
-    const pathType = state.entryDraft?.getIn(['entry', 'meta', 'path_type']) ?? 'index';
-    const customPath = selectCustomPath(
-      collection,
-      fromJS({ entry: { meta: { path: value, path_type: pathType } } }),
-    );
-
-    const existingEntry = customPath
-      ? selectEntryByPath(state.entries, collection.get('name'), customPath)
-      : undefined;
-
+    const existingEntry =
+      getExistingEntry(state.entries, collection, value, 'index') ??
+      getExistingEntry(state.entries, collection, value, 'slug');
     const existingEntryPath = existingEntry?.get('path');
     const draftPath = state.entryDraft?.getIn(['entry', 'path']);
 
