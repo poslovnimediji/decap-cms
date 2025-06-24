@@ -241,6 +241,7 @@ declare module 'decap-cms-core' {
     // This is the default widget, so declaring its type is optional.
     widget?: 'string' | 'text';
     default?: string;
+    visualEditing?: boolean;
   }
 
   export interface CmsFieldMeta {
@@ -314,6 +315,7 @@ declare module 'decap-cms-core' {
     hide?: boolean;
     editor?: {
       preview?: boolean;
+      visualEditing?: boolean;
     };
     publish?: boolean;
     nested?: {
