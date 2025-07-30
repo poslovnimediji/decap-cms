@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [3.8.0](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.7.1...decap-cms-core@3.8.0) (2025-07-15)
+
+### Bug Fixes
+
+- apply duplicate i18n values on entry load ([#7145](https://github.com/decaporg/decap-cms/issues/7145)) ([fc88f4f](https://github.com/decaporg/decap-cms/commit/fc88f4fecfb698ff2456f2cafcf757078773d999))
+
+### Features
+
+- add logo to header ([#7487](https://github.com/decaporg/decap-cms/issues/7487)) ([b540ace](https://github.com/decaporg/decap-cms/commit/b540acec943eb231df6aac7b1d515d9b4b84fa5d))
+
+## [3.7.1](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.7.0...decap-cms-core@3.7.1) (2025-07-10)
+
+**Note:** Version bump only for package decap-cms-core
+
+# [3.7.0](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.6.3...decap-cms-core@3.7.0) (2025-06-26)
+
+### Bug Fixes
+
+- **#7375:** fix dependency issues ([#7394](https://github.com/decaporg/decap-cms/issues/7394)) ([871ee26](https://github.com/decaporg/decap-cms/commit/871ee2653bb26b500efb39b6862e8d3681ec0338))
+
 ## [3.6.3](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.6.2...decap-cms-core@3.6.3) (2025-06-06)
 
 ### Bug Fixes
