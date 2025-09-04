@@ -2,7 +2,7 @@ import React from 'react';
 import styled from '@emotion/styled';
 import { connect } from 'react-redux';
 import { Link } from 'react-router-dom';
-import { colors, colorsRaw, components, lengths, zIndex } from 'decap-cms-ui-default';
+import { colors, colorsRaw, components, lengths, zIndex, Icon } from 'decap-cms-ui-default';
 import { translate } from 'react-polyglot';
 
 import { boundGetAsset } from '../../../actions/media';
@@ -164,6 +164,7 @@ function EntryCard({
           <ListCardTitle>
             {summary}
             <TitleIcons>
+              {showIndexFileIcon && <Icon type="home" />}
               {workflowStatus && (
                 <WorkflowBadge status={workflowStatus}>
                   {getStatusLabel(workflowStatus)}
@@ -185,6 +186,7 @@ function EntryCard({
             <CardHeading>
               {summary}
               <TitleIcons>
+                {showIndexFileIcon && <Icon type="home" />}
                 {workflowStatus && (
                   <WorkflowBadge status={workflowStatus}>
                     {getStatusLabel(workflowStatus)}
