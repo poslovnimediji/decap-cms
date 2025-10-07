@@ -1,35 +1,29 @@
-import { BlockquotePlugin } from '@udecode/plate-block-quote/react';
-import {
-  getBlockAbove,
-  isAncestorEmpty,
-  unwrapNodes,
-  isFirstChild,
-  isSelectionAtBlockStart,
-} from '@udecode/plate-common';
-import { createPlatePlugin, Key } from '@udecode/plate-common/react';
+import { BlockquotePlugin } from '@platejs/basic-nodes/react';
+import { PathApi } from 'platejs';
+import { createPlatePlugin, Key } from 'platejs/react';
 
 export const KEY_BLOCKQUOTE_EXIT_BREAK = 'blockquoteExitBreakPlugin';
 
 function isWithinBlockquote(editor, entry) {
-  const blockAbove = getBlockAbove(editor, { at: entry[1] });
+  const blockAbove = editor.api.block({ at: entry[1], above: true });
   return blockAbove?.[0]?.type === BlockquotePlugin.key;
 }
 
 function queryNode(editor, entry, { empty, first, start }) {
   return (
-    (!empty || isAncestorEmpty(editor, entry[0])) &&
-    (!first || isFirstChild(entry[1])) &&
-    (!start || isSelectionAtBlockStart(editor))
+    (!empty || editor.api.isEmpty()) &&
+    (!first || !PathApi.hasPrevious(entry[1])) &&
+    (!start || editor.api.isAt({ start: true }))
   );
 }
 
 function unwrap(editor) {
-  unwrapNodes(editor, { split: true, match: n => n.type === BlockquotePlugin.key });
+   editor.tf.unwrapNodes({ split: true, match: n => n.type === BlockquotePlugin.key });
   return true;
 }
 
 function keyDownHandler({ editor, event, query }) {
-  const entry = getBlockAbove(editor);
+  const entry = editor.api.block();
   if (!entry) return;
 
   if (isWithinBlockquote(editor, entry) && queryNode(editor, entry, query) && unwrap(editor)) {

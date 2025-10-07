@@ -2,6 +2,7 @@
   "scripts": {
     "start": "npm run develop",
     "develop": "nx run-many -t develop --parallel=999 --output-style=stream --exclude=decap-server",
+    "nxv": "nx version",
     "build": "npm run build:esm && nx run-many -t build",
     "build:esm": "nx run-many -t build:esm",
     "build:demo": "npm run build && ncp packages/decap-cms/dist dev-test/dist/",
