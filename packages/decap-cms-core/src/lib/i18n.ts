@@ -379,7 +379,11 @@ export function getI18nDataFiles(
     return diffFiles;
   }
   const paths = getFilePaths(collection, extension, path, slug);
-  const subfolders = isNestedSubfolders(collection);
+  // When using i18n multiple folders, locale is encoded as a subfolder (e.g., `en/index.md`),
+  // so compare using the last two segments. Also respect nested subfolders collections.
+  const subfolders =
+    (getI18nInfo(collection) as I18nInfo).structure === I18N_STRUCTURE.MULTIPLE_FOLDERS ||
+    isNestedSubfolders(collection);
   const dataFiles = paths.reduce((acc, path) => {
     const dataFile = diffFiles.find(file => compareFilePathEndings(file.path, path, subfolders));
     if (dataFile) {
