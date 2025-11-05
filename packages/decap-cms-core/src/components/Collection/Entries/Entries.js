@@ -6,6 +6,7 @@ import { translate } from 'react-polyglot';
 import { Loader, lengths } from 'decap-cms-ui-default';
 
 import EntryListing from './EntryListing';
+import Pagination from './Pagination';
 
 const PaginationMessage = styled.div`
   width: ${lengths.topCardWidth};
@@ -29,6 +30,11 @@ function Entries({
   getWorkflowStatus,
   getUnpublishedEntries,
   filterTerm,
+  paginationEnabled,
+  currentPage,
+  pageSize,
+  totalCount,
+  onPageChange,
 }) {
   const loadingMessages = [
     t('collection.entries.loadingEntries'),
@@ -41,6 +47,13 @@ function Entries({
   }
 
   const hasEntries = (entries && entries.size > 0) || cursor?.actions?.has('append_next');
+
+  // Calculate page count for pagination
+  const pageCount = paginationEnabled && totalCount > 0 ? Math.ceil(totalCount / pageSize) : 1;
+
+  // Show pagination controls only if pagination is enabled and we have entries
+  const showPagination = paginationEnabled && totalCount > 0 && pageCount > 1;
+
   if (hasEntries) {
     return (
       <>
@@ -54,10 +67,21 @@ function Entries({
           getWorkflowStatus={getWorkflowStatus}
           getUnpublishedEntries={getUnpublishedEntries}
           filterTerm={filterTerm}
+          paginationEnabled={paginationEnabled}
         />
         {isFetching && page !== undefined && entries.size > 0 ? (
           <PaginationMessage>{t('collection.entries.loadingEntries')}</PaginationMessage>
         ) : null}
+        {showPagination && !isFetching && (
+          <Pagination
+            currentPage={currentPage}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            onPageChange={onPageChange}
+            t={t}
+          />
+        )}
       </>
     );
   }
@@ -77,6 +101,13 @@ Entries.propTypes = {
   getWorkflowStatus: PropTypes.func,
   getUnpublishedEntries: PropTypes.func,
   filterTerm: PropTypes.string,
+  paginationEnabled: PropTypes.bool,
+  paginationConfig: PropTypes.object,
+  currentPage: PropTypes.number,
+  pageSize: PropTypes.number,
+  totalCount: PropTypes.number,
+  onPageChange: PropTypes.func,
+  onPageSizeChange: PropTypes.func,
 };
 
 export default translate()(Entries);

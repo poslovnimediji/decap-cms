@@ -1,9 +1,10 @@
 import { fromJS, List, Map } from 'immutable';
 import isEqual from 'lodash/isEqual';
+import orderBy from 'lodash/orderBy';
 import { Cursor } from 'decap-cms-lib-util';
 
 import { selectCollectionEntriesCursor } from '../reducers/cursors';
-import { selectFields, updateFieldByKey } from '../reducers/collections';
+import { selectFields, updateFieldByKey, selectSortDataPath } from '../reducers/collections';
 import { selectIntegration, selectPublishedSlugs } from '../reducers';
 import { getIntegrationProvider } from '../integrations';
 import { currentBackend } from '../backend';
@@ -19,6 +20,15 @@ import { selectIsFetching, selectEntriesSortFields, selectEntryByPath } from '..
 import { navigateToEntry } from '../routing/history';
 import { getProcessSegment } from '../lib/formatters';
 import { hasI18n, duplicateDefaultI18nFields, serializeI18n, I18N, I18N_FIELD } from '../lib/i18n';
+import { isPaginationEnabled } from '../lib/pagination';
+import {
+  hasActiveFilters,
+  hasActiveGroups,
+  hasActiveSorts,
+  extractActiveFilters,
+  matchesFilters,
+  getFieldValue,
+} from '../lib/entryHelpers';
 import { addNotification } from './notifications';
 import { selectCustomPath } from '../reducers/entryDraft';
 
@@ -86,6 +96,10 @@ export const ADD_DRAFT_ENTRY_MEDIA_FILE = 'ADD_DRAFT_ENTRY_MEDIA_FILE';
 export const REMOVE_DRAFT_ENTRY_MEDIA_FILE = 'REMOVE_DRAFT_ENTRY_MEDIA_FILE';
 
 export const CHANGE_VIEW_STYLE = 'CHANGE_VIEW_STYLE';
+
+export const SET_ENTRIES_PAGE_SIZE = 'SET_ENTRIES_PAGE_SIZE';
+export const LOAD_ENTRIES_PAGE = 'LOAD_ENTRIES_PAGE';
+export const SET_ENTRIES_PAGE = 'SET_ENTRIES_PAGE';
 
 /*
  * Simple Action Creators (Internal)
@@ -159,6 +173,44 @@ export function entriesFailed(collection: Collection, error: Error) {
   };
 }
 
+export function setEntriesPageSize(collection: Collection, pageSize: number) {
+  return {
+    type: SET_ENTRIES_PAGE_SIZE,
+    payload: {
+      collection: collection.get('name'),
+      pageSize,
+    },
+  };
+}
+
+export function setEntriesPage(collection: Collection, page: number) {
+  return {
+    type: SET_ENTRIES_PAGE,
+    payload: {
+      collection: collection.get('name'),
+      page,
+    },
+  };
+}
+
+export function loadEntriesPage(collection: Collection, page: number) {
+  return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
+    const state = getState();
+    const collectionName = collection.get('name');
+
+    // Check if sorting is active (sortedIds exists)
+    const sortedIds = state.entries.getIn(['pages', collectionName, 'sortedIds']);
+
+    if (sortedIds) {
+      // Client-side pagination: just update the page index
+      dispatch(setEntriesPage(collection, page));
+    } else {
+      // Server-side pagination: load new entries from backend
+      dispatch(loadEntries(collection, page));
+    }
+  };
+}
+
 export async function getAllEntries(state: State, collection: Collection) {
   const backend = currentBackend(state.config);
   const integration = selectIntegration(state, collection.get('name'), 'listEntries');
@@ -176,12 +228,14 @@ export function sortByField(
 ) {
   return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
     const state = getState();
+    const collectionName = collection.get('name');
     // if we're already fetching we update the sort key, but skip loading entries
-    const isFetching = selectIsFetching(state.entries, collection.get('name'));
+    const isFetching = selectIsFetching(state.entries, collectionName);
+
     dispatch({
       type: SORT_ENTRIES_REQUEST,
       payload: {
-        collection: collection.get('name'),
+        collection: collectionName,
         key,
         direction,
       },
@@ -191,16 +245,53 @@ export function sortByField(
     }
 
     try {
-      const entries = await getAllEntries(state, collection);
-      dispatch({
-        type: SORT_ENTRIES_SUCCESS,
-        payload: {
-          collection: collection.get('name'),
-          key,
-          direction,
-          entries,
-        },
-      });
+      let entries = await getAllEntries(state, collection);
+
+      // Check if filtering is active - if so, apply filters first
+      const activeFilters = state.entries.getIn(['filter', collectionName]);
+      if (hasActiveFilters(activeFilters)) {
+        const filters = extractActiveFilters(activeFilters);
+        entries = entries.filter(entry => matchesFilters(entry, filters));
+      }
+
+      // Sort entries by the specified field
+      const dataPath = selectSortDataPath(collection, key);
+      const order = direction === SortDirection.Ascending ? 'asc' : 'desc';
+
+      const sortedEntries = orderBy(
+        entries,
+        [
+          entry => {
+            const value = getFieldValue(entry, dataPath);
+            // Handle case-insensitive string sorting
+            return typeof value === 'string' ? value.toLowerCase() : value;
+          },
+        ],
+        [order],
+      );
+
+      // Check if grouping is active - if so, use GROUP_ENTRIES_SUCCESS to avoid pagination
+      const activeGroups = state.entries.getIn(['group', collectionName]);
+
+      if (hasActiveGroups(activeGroups)) {
+        dispatch({
+          type: GROUP_ENTRIES_SUCCESS,
+          payload: {
+            collection: collectionName,
+            entries: sortedEntries,
+          },
+        });
+      } else {
+        dispatch({
+          type: SORT_ENTRIES_SUCCESS,
+          payload: {
+            collection: collectionName,
+            key,
+            direction,
+            entries: sortedEntries,
+          },
+        });
+      }
     } catch (error) {
       dispatch({
         type: SORT_ENTRIES_FAILURE,
@@ -220,6 +311,16 @@ export function filterByField(collection: Collection, filter: ViewFilter) {
     const state = getState();
     // if we're already fetching we update the filter key, but skip loading entries
     const isFetching = selectIsFetching(state.entries, collection.get('name'));
+
+    // Check if this filter is currently active (to detect if we're disabling it)
+    const currentFilter = state.entries.getIn(['filter', collection.get('name'), filter.id]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isCurrentlyActive =
+      currentFilter && typeof (currentFilter as any).get === 'function'
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (currentFilter as any).get('active') === true
+        : false;
+
     dispatch({
       type: FILTER_ENTRIES_REQUEST,
       payload: {
@@ -232,15 +333,105 @@ export function filterByField(collection: Collection, filter: ViewFilter) {
     }
 
     try {
-      const entries = await getAllEntries(state, collection);
-      dispatch({
-        type: FILTER_ENTRIES_SUCCESS,
-        payload: {
-          collection: collection.get('name'),
-          filter,
-          entries,
-        },
+      // If we're disabling the last active filter, reload with pagination
+      const allFilters = state.entries.getIn(['filter', collection.get('name')]);
+      let hasOtherActiveFilters = false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (allFilters && typeof (allFilters as any).some === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        hasOtherActiveFilters = (allFilters as any).some(
+          (f: any) => f.get('id') !== filter.id && f.get('active') === true,
+        );
+      }
+
+      if (isCurrentlyActive && !hasOtherActiveFilters) {
+        // Disabling filtering - reload entries with pagination
+        return dispatch(loadEntries(collection));
+      }
+
+      // Enabling filtering or switching filters - load all entries and filter them
+      const allEntries = await getAllEntries(state, collection);
+
+      // Get the new filter state (it was toggled in FILTER_ENTRIES_REQUEST)
+      const updatedState = getState();
+      const updatedFilters = updatedState.entries.getIn(['filter', collection.get('name')]);
+
+      // Apply all active filters
+      const filteredEntries = allEntries.filter(entry => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const activeFilters: any[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (updatedFilters && typeof (updatedFilters as any).forEach === 'function') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (updatedFilters as any).forEach((f: any) => {
+            if (f.get('active') === true) {
+              activeFilters.push({
+                pattern: f.get('pattern'),
+                field: f.get('field'),
+              });
+            }
+          });
+        }
+
+        // Entry must match all active filters
+        return activeFilters.every(({ pattern, field }) => {
+          const data = entry.data || {};
+          const fieldParts = field.split('.');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let value: any = data;
+          for (const part of fieldParts) {
+            value = value?.[part];
+          }
+          const matched = value !== undefined && new RegExp(String(pattern)).test(String(value));
+          return matched;
+        });
       });
+
+      // Check if sorting is active - if so, apply sort after filtering
+      const activeSorts = updatedState.entries.getIn(['sort', collection.get('name')]);
+
+      let finalEntries = filteredEntries;
+      if (hasActiveSorts(activeSorts)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sortField = (activeSorts as any).valueSeq().first();
+        const sortKey = sortField.get('key');
+        const sortDirection = sortField.get('direction');
+        const dataPath = selectSortDataPath(collection, sortKey);
+        const order = sortDirection === SortDirection.Ascending ? 'asc' : 'desc';
+
+        finalEntries = orderBy(
+          filteredEntries,
+          [
+            entry => {
+              const value = getFieldValue(entry, dataPath);
+              return typeof value === 'string' ? value.toLowerCase() : value;
+            },
+          ],
+          [order],
+        );
+      }
+
+      // Check if grouping is active - if so, use GROUP_ENTRIES_SUCCESS to avoid pagination
+      const activeGroups = updatedState.entries.getIn(['group', collection.get('name')]);
+
+      if (hasActiveGroups(activeGroups)) {
+        dispatch({
+          type: GROUP_ENTRIES_SUCCESS,
+          payload: {
+            collection: collection.get('name'),
+            entries: finalEntries,
+          },
+        });
+      } else {
+        dispatch({
+          type: FILTER_ENTRIES_SUCCESS,
+          payload: {
+            collection: collection.get('name'),
+            filter,
+            entries: finalEntries,
+          },
+        });
+      }
     } catch (error) {
       dispatch({
         type: FILTER_ENTRIES_FAILURE,
@@ -258,6 +449,16 @@ export function groupByField(collection: Collection, group: ViewGroup) {
   return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
     const state = getState();
     const isFetching = selectIsFetching(state.entries, collection.get('name'));
+
+    // Check if this group is currently active (to detect if we're disabling it)
+    const currentGroup = state.entries.getIn(['group', collection.get('name'), group.id]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isCurrentlyActive =
+      currentGroup && typeof (currentGroup as any).get === 'function'
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (currentGroup as any).get('active') === true
+        : false;
+
     dispatch({
       type: GROUP_ENTRIES_REQUEST,
       payload: {
@@ -270,7 +471,59 @@ export function groupByField(collection: Collection, group: ViewGroup) {
     }
 
     try {
-      const entries = await getAllEntries(state, collection);
+      // If we're disabling the last active group, reload with pagination
+      const allGroups = state.entries.getIn(['group', collection.get('name')]);
+      let hasOtherActiveGroups = false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (allGroups && typeof (allGroups as any).some === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        hasOtherActiveGroups = (allGroups as any).some(
+          (g: any) => g.get('id') !== group.id && g.get('active') === true,
+        );
+      }
+
+      if (isCurrentlyActive && !hasOtherActiveGroups) {
+        // Disabling grouping - reload entries with pagination
+        return dispatch(loadEntries(collection));
+      }
+
+      // Enabling grouping or switching groups - load all entries
+      let entries = await getAllEntries(state, collection);
+
+      // Get the updated state after GROUP_ENTRIES_REQUEST
+      const updatedState = getState();
+
+      // Check if filtering is active - if so, apply filters
+      const activeFilters = updatedState.entries.getIn(['filter', collection.get('name')]);
+
+      if (hasActiveFilters(activeFilters)) {
+        const filters = extractActiveFilters(activeFilters);
+        entries = entries.filter(entry => matchesFilters(entry, filters));
+      }
+
+      // Check if sorting is active - if so, apply sort
+      const activeSorts = updatedState.entries.getIn(['sort', collection.get('name')]);
+
+      if (hasActiveSorts(activeSorts)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sortField = (activeSorts as any).valueSeq().first();
+        const sortKey = sortField.get('key');
+        const sortDirection = sortField.get('direction');
+        const dataPath = selectSortDataPath(collection, sortKey);
+        const order = sortDirection === SortDirection.Ascending ? 'asc' : 'desc';
+
+        entries = orderBy(
+          entries,
+          [
+            entry => {
+              const value = getFieldValue(entry, dataPath);
+              return typeof value === 'string' ? value.toLowerCase() : value;
+            },
+          ],
+          [order],
+        );
+      }
+
       dispatch({
         type: GROUP_ENTRIES_SUCCESS,
         payload: {
@@ -591,7 +844,9 @@ export function loadEntries(collection: Collection, page = 0) {
     const provider = integration
       ? getIntegrationProvider(state.integrations, backend.getToken, integration)
       : backend;
-    const append = !!(page && !isNaN(page) && page > 0);
+    // In new pagination mode, page navigation replaces items; append applies only to old/infinite modes
+    const paginationEnabled = isPaginationEnabled(collection, state.config);
+    const append = paginationEnabled ? false : !!(page && !isNaN(page) && page > 0);
     dispatch(entriesLoading(collection));
 
     try {
