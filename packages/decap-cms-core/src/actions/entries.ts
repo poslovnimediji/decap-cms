@@ -21,6 +21,7 @@ import { navigateToEntry } from '../routing/history';
 import { getProcessSegment } from '../lib/formatters';
 import { hasI18n, duplicateDefaultI18nFields, serializeI18n, I18N, I18N_FIELD } from '../lib/i18n';
 import { isPaginationEnabled } from '../lib/pagination';
+import { getCachedEntries, setCachedEntries, invalidateCollectionCache } from '../lib/entryCache';
 import {
   hasActiveFilters,
   hasActiveGroups,
@@ -45,6 +46,8 @@ import type {
   ViewGroup,
   Entry,
   Entries,
+  FilterMap,
+  GroupMap,
 } from '../types/redux';
 import type { EntryValue } from '../valueObjects/Entry';
 import type { Backend } from '../backend';
@@ -314,11 +317,9 @@ export function filterByField(collection: Collection, filter: ViewFilter) {
 
     // Check if this filter is currently active (to detect if we're disabling it)
     const currentFilter = state.entries.getIn(['filter', collection.get('name'), filter.id]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const isCurrentlyActive =
-      currentFilter && typeof (currentFilter as any).get === 'function'
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (currentFilter as any).get('active') === true
+      currentFilter && typeof (currentFilter as Map<string, unknown>).get === 'function'
+        ? (currentFilter as Map<string, unknown>).get('active') === true
         : false;
 
     dispatch({
@@ -336,11 +337,9 @@ export function filterByField(collection: Collection, filter: ViewFilter) {
       // If we're disabling the last active filter, reload with pagination
       const allFilters = state.entries.getIn(['filter', collection.get('name')]);
       let hasOtherActiveFilters = false;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (allFilters && typeof (allFilters as any).some === 'function') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        hasOtherActiveFilters = (allFilters as any).some(
-          (f: any) => f.get('id') !== filter.id && f.get('active') === true,
+      if (allFilters && typeof (allFilters as Map<string, FilterMap>).some === 'function') {
+        hasOtherActiveFilters = (allFilters as Map<string, FilterMap>).some(
+          (f?: FilterMap) => f?.get('id') !== filter.id && f?.get('active') === true,
         );
       }
 
@@ -452,11 +451,9 @@ export function groupByField(collection: Collection, group: ViewGroup) {
 
     // Check if this group is currently active (to detect if we're disabling it)
     const currentGroup = state.entries.getIn(['group', collection.get('name'), group.id]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const isCurrentlyActive =
-      currentGroup && typeof (currentGroup as any).get === 'function'
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (currentGroup as any).get('active') === true
+      currentGroup && typeof (currentGroup as Map<string, unknown>).get === 'function'
+        ? (currentGroup as Map<string, unknown>).get('active') === true
         : false;
 
     dispatch({
@@ -474,11 +471,9 @@ export function groupByField(collection: Collection, group: ViewGroup) {
       // If we're disabling the last active group, reload with pagination
       const allGroups = state.entries.getIn(['group', collection.get('name')]);
       let hasOtherActiveGroups = false;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (allGroups && typeof (allGroups as any).some === 'function') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        hasOtherActiveGroups = (allGroups as any).some(
-          (g: any) => g.get('id') !== group.id && g.get('active') === true,
+      if (allGroups && typeof (allGroups as Map<string, GroupMap>).some === 'function') {
+        hasOtherActiveGroups = (allGroups as Map<string, GroupMap>).some(
+          (g?: GroupMap) => g?.get('id') !== group.id && g?.get('active') === true,
         );
       }
 
@@ -833,14 +828,15 @@ export function loadEntries(collection: Collection, page = 0) {
       return;
     }
     const state = getState();
-    const sortFields = selectEntriesSortFields(state.entries, collection.get('name'));
+    const collectionName = collection.get('name');
+    const sortFields = selectEntriesSortFields(state.entries, collectionName);
     if (sortFields && sortFields.length > 0) {
       const field = sortFields[0];
       return dispatch(sortByField(collection, field.get('key'), field.get('direction')));
     }
 
     const backend = currentBackend(state.config);
-    const integration = selectIntegration(state, collection.get('name'), 'listEntries');
+    const integration = selectIntegration(state, collectionName, 'listEntries');
     const provider = integration
       ? getIntegrationProvider(state.integrations, backend.getToken, integration)
       : backend;
@@ -853,14 +849,39 @@ export function loadEntries(collection: Collection, page = 0) {
       const loadAllEntries = collection.has('nested') || hasI18n(collection);
       const isI18nCollection = hasI18n(collection);
 
+      // Try cache first for collections that load all entries
+      let cachedEntries: EntryValue[] | null = null;
+      if (loadAllEntries) {
+        cachedEntries = await getCachedEntries(collectionName);
+      }
+
       let response: {
         cursor: Cursor;
         pagination: number;
         entries: EntryValue[];
-      } = await (loadAllEntries
-        ? // nested collections and i18n collections require all entries to construct the tree/group
-          provider.listAllEntries(collection).then((entries: EntryValue[]) => ({ entries }))
-        : provider.listEntries(collection, page));
+      };
+
+      if (cachedEntries) {
+        // Use cached entries
+        console.log(`[loadEntries] Using cached entries for ${collectionName}`);
+        response = {
+          entries: cachedEntries,
+          cursor: Cursor.create({}),
+          pagination: 0,
+        };
+      } else {
+        // Fetch from backend
+        response = await (loadAllEntries
+          ? // nested collections and i18n collections and i18n collections require all entries to construct the tree/group/group
+            provider.listAllEntries(collection).then((entries: EntryValue[]) => ({ entries }))
+          : provider.listEntries(collection, page));
+
+        // Cache entries if we loaded all of them
+        if (loadAllEntries && response.entries) {
+          await setCachedEntries(collectionName, response.entries);
+        }
+      }
+
       response = {
         ...response,
         // The only existing backend using the pagination system is the
@@ -891,6 +912,17 @@ export function loadEntries(collection: Collection, page = 0) {
           append,
         ),
       );
+
+      // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
+      if (isI18nCollection && paginationEnabled) {
+        dispatch({
+          type: SORT_ENTRIES_SUCCESS,
+          payload: {
+            collection: collectionName,
+            entries,
+          },
+        });
+      }
 
       // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
       if (isI18nCollection && paginationEnabled) {
@@ -1197,6 +1229,9 @@ export function persistEntry(collection: Collection) {
         usedSlugs,
       })
       .then(async (newSlug: string) => {
+        // Invalidate cache for this collection
+        await invalidateCollectionCache(collection.get('name'));
+
         dispatch(
           addNotification({
             message: {
@@ -1245,7 +1280,10 @@ export function deleteEntry(collection: Collection, slug: string) {
     dispatch(entryDeleting(collection, slug));
     return backend
       .deleteEntry(state, collection, slug)
-      .then(() => {
+      .then(async () => {
+        // Invalidate cache for this collection
+        await invalidateCollectionCache(collection.get('name'));
+
         return dispatch(entryDeleted(collection, slug));
       })
       .catch((error: Error) => {

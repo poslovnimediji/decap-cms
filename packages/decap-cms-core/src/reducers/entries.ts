@@ -82,6 +82,14 @@ let slug: string;
 const storageSortKey = 'decap-cms.entries.sort';
 const viewStyleKey = 'decap-cms.entries.viewStyle';
 const paginationKey = 'decap-cms.entries.pagination';
+
+function normalizeDoubleSlashes(path: string) {
+  if (!path) {
+    return path;
+  }
+
+  return path.replace(/([^:]\/)\/+/g, '$1');
+}
 type StorageSortObject = SortObject & { index: number };
 type StorageSort = { [collection: string]: { [key: string]: StorageSortObject } };
 
@@ -267,10 +275,8 @@ function entries(
           const pageSize =
             currentPageSize && currentPageSize !== 100 ? currentPageSize : cursorPageSize;
 
-          map.setIn(
-            ['pagination', collection],
-            existingPagination.merge({ currentPage, totalCount, pageSize }),
-          );
+          const updated = existingPagination.merge({ currentPage, totalCount, pageSize });
+          map.setIn(['pagination', collection], updated);
         } else {
           // For i18n or client-side pagination (no cursor metadata), use actual loaded entry count
           // This will be updated correctly when SORT_ENTRIES_SUCCESS sets sortedIds
@@ -589,12 +595,13 @@ export function selectEntries(state: Entries, collection: Collection, configPage
 
   if (sortedIdsRaw && List.isList(sortedIdsRaw)) {
     const sortedIds = sortedIdsRaw as List<string>;
-    
+
     // Only apply pagination if configPageSize is explicitly provided (meaning pagination is enabled)
     // If configPageSize is undefined, show all sorted entries
-    const pagedIds = configPageSize !== undefined 
-      ? sortedIds.slice((currentPage - 1) * pageSize, (currentPage - 1) * pageSize + pageSize)
-      : sortedIds;
+    const pagedIds =
+      configPageSize !== undefined
+        ? sortedIds.slice((currentPage - 1) * pageSize, (currentPage - 1) * pageSize + pageSize)
+        : sortedIds;
 
     // Always look up entries from the global entities map to ensure correct order
     const entitiesMap = state.get('entities');
@@ -997,12 +1004,14 @@ export function selectMediaFilePublicPath(
   }
 
   const name = 'public_folder';
-  let publicFolder = config[name]!;
+  let publicFolder = normalizeDoubleSlashes(config[name]!);
 
   const customFolder = hasCustomFolder(name, collection, entryMap?.get('slug'), field);
 
   if (customFolder) {
-    publicFolder = evaluateFolder(name, config, collection!, entryMap, field);
+    publicFolder = normalizeDoubleSlashes(
+      evaluateFolder(name, config, collection!, entryMap, field),
+    );
   }
 
   if (isAbsolutePath(publicFolder)) {

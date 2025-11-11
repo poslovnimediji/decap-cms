@@ -1,6 +1,5 @@
 import attempt from 'lodash/attempt';
 import isError from 'lodash/isError';
-import take from 'lodash/take';
 import unset from 'lodash/unset';
 import isEmpty from 'lodash/isEmpty';
 import { v4 as uuid } from 'uuid';
@@ -90,6 +89,9 @@ function getCursor(
   depth: number,
   pageSize = DEFAULT_PAGE_SIZE,
 ) {
+  if (pageSize <= 0) {
+    throw new Error('pageSize must be positive');
+  }
   const count = entries.length;
   const pageCount = Math.ceil(count / pageSize);
   return Cursor.create({
@@ -229,7 +231,7 @@ export default class TestBackend implements Implementation {
 
     // If pagination is enabled, return only the requested page
     // Otherwise, return all entries (for backward compatibility)
-    const ret = usePagination ? take(entries.slice((page - 1) * pageSize), pageSize) : entries;
+    const ret = usePagination ? entries.slice((page - 1) * pageSize, page * pageSize) : entries;
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     ret[CURSOR_COMPATIBILITY_SYMBOL] = cursor;
