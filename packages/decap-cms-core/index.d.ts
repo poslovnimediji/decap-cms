@@ -300,6 +300,12 @@ declare module 'decap-cms-core' {
     pattern?: string;
   }
 
+  export interface SortableField {
+    field: string;
+    label?: string;
+    default_sort?: boolean | 'asc' | 'desc';
+  }
+
   export interface CmsCollection {
     name: string;
     label: string;
@@ -340,7 +346,7 @@ declare module 'decap-cms-core' {
     path?: string;
     media_folder?: string;
     public_folder?: string;
-    sortable_fields?: string[];
+    sortable_fields?: (string | SortableField)[];
     view_filters?: ViewFilter[];
     view_groups?: ViewGroup[];
     i18n?: boolean | CmsI18nConfig;
@@ -353,7 +359,7 @@ declare module 'decap-cms-core' {
     /**
      * @deprecated Use sortable_fields instead
      */
-    sortableFields?: string[];
+    sortableFields?: (string | SortableField)[];
   }
 
   export interface CmsBackend {

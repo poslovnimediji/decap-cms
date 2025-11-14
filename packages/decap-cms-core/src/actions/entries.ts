@@ -4,7 +4,7 @@ import orderBy from 'lodash/orderBy';
 import { Cursor } from 'decap-cms-lib-util';
 
 import { selectCollectionEntriesCursor } from '../reducers/cursors';
-import { selectFields, updateFieldByKey, selectSortDataPath } from '../reducers/collections';
+import { selectFields, updateFieldByKey, selectSortDataPath, selectDefaultSortField } from '../reducers/collections';
 import { selectIntegration, selectPublishedSlugs } from '../reducers';
 import { getIntegrationProvider } from '../integrations';
 import { currentBackend } from '../backend';
@@ -829,10 +829,20 @@ export function loadEntries(collection: Collection, page = 0) {
     }
     const state = getState();
     const collectionName = collection.get('name');
+
+    // If user has already set a sort, use it
     const sortFields = selectEntriesSortFields(state.entries, collectionName);
     if (sortFields && sortFields.length > 0) {
       const field = sortFields[0];
       return dispatch(sortByField(collection, field.get('key'), field.get('direction')));
+    }
+
+    // Otherwise, check for a default sort field in the collection configuration
+    const defaultSort = selectDefaultSortField(collection);
+    if (defaultSort) {
+      const direction =
+        defaultSort.direction === 'desc' ? SortDirection.Descending : SortDirection.Ascending;
+      return dispatch(sortByField(collection, defaultSort.field, direction));
     }
 
     const backend = currentBackend(state.config);
