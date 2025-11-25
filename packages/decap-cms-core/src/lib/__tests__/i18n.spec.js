@@ -5,7 +5,6 @@ import * as i18n from '../i18n';
 jest.mock('../../reducers/collections', () => {
   return {
     selectEntrySlug: () => 'index',
-    // provide default implementation to avoid undefined in tests using i18n.getI18nDataFiles
     isNestedSubfolders: () => false,
   };
 });
