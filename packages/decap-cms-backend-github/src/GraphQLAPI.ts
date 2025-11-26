@@ -113,17 +113,55 @@ export default class GraphQLAPI extends API {
         },
       };
     });
-    const httpLink = createHttpLink({ uri: `${this.apiRoot}/graphql` });
+    // Always use direct GitHub API access for GraphQL
+    // base_url is for OAuth endpoints only, not API requests
+    // Ensure apiRoot is always the GitHub API endpoint
+    const graphqlEndpoint = this.apiRoot.includes('api.github.com')
+      ? `${this.apiRoot}/graphql`
+      : 'https://api.github.com/graphql';
+
+    console.log('[GraphQLAPI] Using GraphQL endpoint:', graphqlEndpoint);
+
+    const httpLink = createHttpLink({
+      uri: graphqlEndpoint,
+      fetch, // Use global fetch
+    });
+
+    // Implement intelligent cache with custom dataIdFromObject for better cache keys
+    const cache = new InMemoryCache({
+      fragmentMatcher,
+      dataIdFromObject: (object: {
+        __typename?: string;
+        sha?: string;
+        oid?: string;
+        id?: string;
+      }) => {
+        switch (object.__typename) {
+          // Cache blobs and trees by SHA (immutable)
+          case 'Blob':
+          case 'Tree':
+          case 'Commit':
+            return object.sha || object.oid || defaultDataIdFromObject(object);
+          // Use default for other types
+          default:
+            return defaultDataIdFromObject(object);
+        }
+      },
+    });
+
     return new ApolloClient({
       link: authLink.concat(httpLink),
-      cache: new InMemoryCache({ fragmentMatcher }),
+      cache,
       defaultOptions: {
         watchQuery: {
-          fetchPolicy: NO_CACHE,
+          // Use cache-and-network for watch queries to get immediate cached data
+          // while fetching fresh data in background
+          fetchPolicy: 'cache-and-network',
           errorPolicy: 'ignore',
         },
         query: {
-          fetchPolicy: NO_CACHE,
+          // Use cache-first as default, override with NO_CACHE when needed
+          fetchPolicy: CACHE_FIRST,
           errorPolicy: 'all',
         },
       },
@@ -132,6 +170,29 @@ export default class GraphQLAPI extends API {
 
   reset() {
     return this.client.resetStore();
+  }
+
+  /**
+   * Invalidate specific cache entries
+   * Useful for clearing stale data after mutations
+   */
+  invalidateCache(typename: string, id?: string) {
+    if (id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.client.cache as any).data.delete(`${typename}:${id}`);
+    } else {
+      // Clear all entries of this type
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cache = this.client.cache as any;
+      const rootQuery = cache.data.data.ROOT_QUERY;
+      if (rootQuery) {
+        Object.keys(rootQuery).forEach(key => {
+          if (key.includes(typename)) {
+            delete rootQuery[key];
+          }
+        });
+      }
+    }
   }
 
   async getRepository(owner: string, name: string) {
@@ -382,9 +443,20 @@ export default class GraphQLAPI extends API {
   async listFiles(path: string, { repoURL = this.repoURL, branch = this.branch, depth = 1 } = {}) {
     const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
     const folder = trim(path, '/');
+
+    // Cap depth at 3 to prevent overly complex GraphQL queries that cause 502 errors
+    // For deeper traversals, use listFilesRecursive instead
+    const maxDepth = Math.min(depth, 3);
+
+    // For depths > 3, use the recursive approach which handles it better
+    if (depth > 3) {
+      return this.listFilesRecursive(path, { repoURL, branch, maxDepth: depth });
+    }
+
     const { data } = await this.query({
-      query: queries.files(depth),
+      query: queries.files(maxDepth),
       variables: { owner, name, expression: `${branch}:${folder}` },
+      fetchPolicy: NO_CACHE, // Directory contents can change
     });
 
     if (data.repository.object) {
@@ -393,6 +465,114 @@ export default class GraphQLAPI extends API {
     } else {
       return [];
     }
+  }
+
+  /**
+   * List files with server-side pagination support
+   * Returns files along with pagination info
+   */
+  async listFilesPaginated(
+    path: string,
+    options: {
+      repoURL?: string;
+      branch?: string;
+      pageSize?: number;
+      page?: number;
+    } = {},
+  ): Promise<{
+    files: TreeFile[];
+    hasMore: boolean;
+    totalCount: number;
+    page: number;
+    pageCount: number;
+  }> {
+    const { repoURL = this.repoURL, branch = this.branch, pageSize = 20, page = 1 } = options;
+
+    // For now, we still load all files and paginate in memory
+    // GitHub's GraphQL API doesn't support pagination on tree entries directly
+    // This is a transition implementation that maintains backward compatibility
+    // while setting up the structure for future improvements
+    const allFiles = await this.listFiles(path, { repoURL, branch, depth: 1 });
+
+    const totalCount = allFiles.length;
+    const pageCount = Math.ceil(totalCount / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const files = allFiles.slice(startIndex, endIndex);
+
+    return {
+      files,
+      hasMore: page < pageCount,
+      totalCount,
+      page,
+      pageCount,
+    };
+  }
+
+  /**
+   * List files recursively with chunked loading to avoid GraphQL complexity limits
+   * Loads files in batches to handle large directory trees
+   */
+  async listFilesRecursive(
+    path: string,
+    options: {
+      repoURL?: string;
+      branch?: string;
+      maxDepth?: number;
+      chunkSize?: number;
+    } = {},
+  ): Promise<TreeFile[]> {
+    const { repoURL = this.repoURL, branch = this.branch, maxDepth = 3, chunkSize = 100 } = options;
+    const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
+    const folder = trim(path, '/');
+
+    const allFiles: TreeFile[] = [];
+    const dirsToProcess: Array<{ path: string; depth: number }> = [{ path: folder, depth: 0 }];
+
+    while (dirsToProcess.length > 0) {
+      // Process directories in chunks to avoid overwhelming the API
+      const chunk = dirsToProcess.splice(0, chunkSize);
+
+      await Promise.all(
+        chunk.map(async ({ path: dirPath, depth }) => {
+          if (depth >= maxDepth) {
+            return;
+          }
+
+          try {
+            const { data } = await this.query({
+              query: queries.treeEntriesRecursive,
+              variables: { owner, name, expression: `${branch}:${dirPath}` },
+              fetchPolicy: NO_CACHE, // Directory contents can change
+            });
+
+            if (data.repository.object && data.repository.object.entries) {
+              for (const entry of data.repository.object.entries) {
+                const fullPath = dirPath ? `${dirPath}/${entry.name}` : entry.name;
+
+                if (entry.type === 'blob') {
+                  allFiles.push({
+                    name: entry.name,
+                    type: entry.type,
+                    id: entry.sha,
+                    path: fullPath,
+                    size: entry.blob?.size || 0,
+                  });
+                } else if (entry.type === 'tree' && depth + 1 < maxDepth) {
+                  // Queue subdirectory for processing
+                  dirsToProcess.push({ path: fullPath, depth: depth + 1 });
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Error loading files from ${dirPath}:`, error);
+            // Continue processing other directories
+          }
+        }),
+      );
+    }
+
+    return allFiles;
   }
 
   getBranchQualifiedName(branch: string) {
@@ -471,7 +651,7 @@ export default class GraphQLAPI extends API {
   async getPullRequest(number: number) {
     const { data } = await this.query({
       ...this.getPullRequestQuery(number),
-      fetchPolicy: CACHE_FIRST,
+      fetchPolicy: NO_CACHE, // PRs are mutable, always fetch fresh data
     });
 
     // https://developer.github.com/v4/enum/pullrequeststate/
@@ -706,5 +886,110 @@ export default class GraphQLAPI extends API {
       return data.repository.file.sha;
     }
     throw new APIError('Not Found', 404, API_NAME);
+  }
+
+  /**
+   * Batch fetch commit metadata for multiple files using GraphQL
+   * Much more efficient than making individual REST API calls per file
+   */
+  async batchReadFileMetadata(
+    files: Array<{ path: string; sha?: string | null }>,
+    options: { branch?: string; repoURL?: string } = {},
+  ): Promise<Array<{ author: string; updatedOn: string }>> {
+    const { branch = this.branch, repoURL = this.repoURL } = options;
+    const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
+
+    // GitHub GraphQL has query complexity limits, so batch in chunks
+    const BATCH_SIZE = 20;
+    const results: Array<{ author: string; updatedOn: string }> = [];
+
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+
+      // Build variables for the batch query
+      const variables: Record<string, string> = {
+        owner,
+        name,
+        branch,
+      };
+      batch.forEach((file, index) => {
+        variables[`expression${index}`] = `${branch}:${file.path}`;
+      });
+
+      try {
+        const { data } = await this.query({
+          query: queries.fileCommits(batch.map(f => f.path)),
+          variables,
+          fetchPolicy: CACHE_FIRST, // Commit history is immutable
+        });
+
+        // Extract metadata from each file's commit history
+        batch.forEach((_file, index) => {
+          const commitData = data.repository[`commits${index}`];
+          if (commitData?.target?.history?.nodes?.[0]) {
+            const commit = commitData.target.history.nodes[0];
+            results.push({
+              author: commit.author.name || commit.author.email || '',
+              updatedOn: commit.authoredDate || commit.author.date || '',
+            });
+          } else {
+            // Fallback if no commit found
+            results.push({ author: '', updatedOn: '' });
+          }
+        });
+      } catch (error) {
+        // If batch query fails, provide empty metadata for the batch
+        console.warn(`Failed to fetch metadata batch for ${batch.length} files:`, error);
+        batch.forEach(() => results.push({ author: '', updatedOn: '' }));
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Search code using GitHub's Code Search API
+   * Returns file paths matching the search query
+   */
+  async searchCode(
+    searchTerm: string,
+    options: {
+      path?: string;
+      extension?: string;
+      language?: string;
+      limit?: number;
+      repoURL?: string;
+    } = {},
+  ): Promise<{
+    files: Array<{ path: string; oid: string; name: string }>;
+    totalCount: number;
+    hasMore: boolean;
+  }> {
+    const { path, extension, language, limit = 100, repoURL = this.repoURL } = options;
+    const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
+
+    // Build GitHub Code Search query
+    let query = `repo:${owner}/${name}`;
+    if (path) query += ` path:${path}`;
+    if (extension) query += ` extension:${extension}`;
+    if (language) query += ` language:${language}`;
+    query += ` ${searchTerm}`;
+
+    const { data } = await this.query({
+      query: queries.codeSearch,
+      variables: {
+        query,
+        first: Math.min(limit, 100), // GitHub max is 100 per page
+      },
+      fetchPolicy: NO_CACHE, // Search results should always be fresh
+    });
+
+    return {
+      files: data.search.edges.map(
+        (edge: { node: { path: string; oid: string; name: string } }) => edge.node,
+      ),
+      totalCount: data.search.codeCount,
+      hasMore: data.search.pageInfo.hasNextPage,
+    };
   }
 }

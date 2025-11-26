@@ -120,6 +120,12 @@ export class EntriesCollection extends React.Component {
     loadEntriesPage: PropTypes.func.isRequired,
     sortByField: PropTypes.func.isRequired,
     sort: ImmutablePropTypes.orderedMap,
+    error: PropTypes.string,
+    progress: PropTypes.shape({
+      loadedCount: PropTypes.number,
+      totalCount: PropTypes.number,
+      percentage: PropTypes.number,
+    }),
   };
 
   componentDidMount() {
@@ -202,6 +208,8 @@ export class EntriesCollection extends React.Component {
       totalCount,
       setEntriesPageSize,
       loadEntriesPage,
+      error,
+      progress,
     } = this.props;
 
     const hasActiveGroups = groups && groups.length > 0;
@@ -230,6 +238,8 @@ export class EntriesCollection extends React.Component {
           totalCount={totalCount}
           onPageChange={page => loadEntriesPage(collection, page)}
           onPageSizeChange={pageSize => setEntriesPageSize(collection, pageSize)}
+          error={error}
+          progress={progress}
         />
       );
     };
@@ -313,6 +323,10 @@ function mapStateToProps(state, ownProps) {
   // Sort state
   const sort = selectEntriesSort(state.entries, collection.get('name'));
 
+  // Progress state
+  const error = state.entries.getIn(['pages', collection.get('name'), 'error']);
+  const progress = state.entries.getIn(['pages', collection.get('name'), 'progress']);
+
   return {
     collection,
     collections,
@@ -331,6 +345,8 @@ function mapStateToProps(state, ownProps) {
     pageSize,
     totalCount,
     sort,
+    error,
+    progress,
     getWorkflowStatus: (collectionName, slug) => {
       const unpublishedEntry = selectUnpublishedEntry(state, collectionName, slug);
       return unpublishedEntry ? unpublishedEntry.get('status') : null;

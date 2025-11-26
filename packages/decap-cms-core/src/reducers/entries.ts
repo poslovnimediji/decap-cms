@@ -20,6 +20,7 @@ import {
   ENTRIES_REQUEST,
   ENTRIES_SUCCESS,
   ENTRIES_FAILURE,
+  ENTRIES_PROGRESS,
   ENTRY_DELETE_SUCCESS,
   SORT_ENTRIES_REQUEST,
   SORT_ENTRIES_SUCCESS,
@@ -143,7 +144,6 @@ const loadViewStyle = once(() => {
   if (viewStyle) {
     return viewStyle;
   }
-
   localStorage.setItem(viewStyleKey, VIEW_STYLE_LIST);
   return VIEW_STYLE_LIST;
 });
@@ -236,11 +236,12 @@ function entries(
     }
 
     case ENTRIES_SUCCESS: {
-      const payload = action.payload as EntriesSuccessPayload;
+      const payload = action.payload as EntriesSuccessPayload & { hasMore?: boolean };
       collection = payload.collection;
       loadedEntries = payload.entries;
       append = payload.append;
       page = payload.page;
+      const hasMore = payload.hasMore === true;
       return state.withMutations(map => {
         loadedEntries.forEach(entry =>
           map.setIn(
@@ -255,46 +256,64 @@ function entries(
           Map({
             page,
             ids: append ? map.getIn(['pages', collection, 'ids'], List()).concat(ids) : ids,
+            isFetching: hasMore, // keep fetching flag true until last page
           }),
         );
-
         // Update pagination metadata from cursor if available
-        if (payload.cursor && payload.cursor.meta && payload.cursor.meta.get('count')) {
-          const cursorMeta = payload.cursor.meta;
-          const currentPage = cursorMeta.get('page') || 1;
-          const totalCount = cursorMeta.get('count') || 0;
-          const cursorPageSize = cursorMeta.get('pageSize') || 100;
+        const meta = payload.cursor && payload.cursor.meta ? payload.cursor.meta : undefined;
+        const countFromCursor = meta?.get('count');
+        const pageFromCursor = meta?.get('page');
+        const pageSizeFromCursor = meta?.get('pageSize');
 
-          const existingPagination = map.getIn(
-            ['pagination', collection],
-            fromJS({ currentPage: 1, totalCount: 0, pageSize: 100 }),
-          );
-          // Only update pageSize if it hasn't been set yet (on first load)
-          // After that, the config-driven pageSize should be preserved
+        const existingPagination = map.getIn(
+          ['pagination', collection],
+          fromJS({ currentPage: 1, totalCount: 0, pageSize: 100 }),
+        );
+
+        if (countFromCursor) {
+          const currentPage = pageFromCursor || 1;
+          const totalCount = countFromCursor || 0;
           const currentPageSize = existingPagination.get('pageSize');
           const pageSize =
-            currentPageSize && currentPageSize !== 100 ? currentPageSize : cursorPageSize;
+            currentPageSize && currentPageSize !== 100
+              ? currentPageSize
+              : pageSizeFromCursor || 100;
 
           const updated = existingPagination.merge({ currentPage, totalCount, pageSize });
           map.setIn(['pagination', collection], updated);
         } else {
           // For i18n or client-side pagination (no cursor metadata), use actual loaded entry count
-          // This will be updated correctly when SORT_ENTRIES_SUCCESS sets sortedIds
-          const existingPagination = map.getIn(
-            ['pagination', collection],
-            fromJS({ currentPage: 1, totalCount: 0, pageSize: 100 }),
-          );
-          // Don't override totalCount if it's already been set (e.g., by SORT_ENTRIES_SUCCESS)
           const updates: { currentPage: number; totalCount?: number } = { currentPage: 1 };
           if (!existingPagination.get('totalCount')) {
             updates.totalCount = loadedEntries.length;
           }
           map.setIn(['pagination', collection], existingPagination.merge(updates));
         }
+        // Clear any previous errors
+        map.deleteIn(['pages', collection, 'error']);
       });
     }
     case ENTRIES_FAILURE:
-      return state.setIn(['pages', action.meta.collection, 'isFetching'], false);
+      return state.withMutations(map => {
+        map.setIn(['pages', action.meta.collection, 'isFetching'], false);
+        map.setIn(['pages', action.meta.collection, 'error'], action.payload);
+      });
+
+    case ENTRIES_PROGRESS: {
+      const payload = action.payload as {
+        collection: string;
+        loadedCount: number;
+        totalCount: number;
+        percentage: number;
+      };
+      return state.withMutations(map => {
+        map.setIn(['pages', payload.collection, 'progress'], {
+          loadedCount: payload.loadedCount,
+          totalCount: payload.totalCount,
+          percentage: payload.percentage,
+        });
+      });
+    }
 
     case ENTRY_FAILURE: {
       const payload = action.payload as EntryFailurePayload;

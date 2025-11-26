@@ -4,7 +4,12 @@ import orderBy from 'lodash/orderBy';
 import { Cursor } from 'decap-cms-lib-util';
 
 import { selectCollectionEntriesCursor } from '../reducers/cursors';
-import { selectFields, updateFieldByKey, selectSortDataPath, selectDefaultSortField } from '../reducers/collections';
+import {
+  selectFields,
+  updateFieldByKey,
+  selectSortDataPath,
+  selectDefaultSortField,
+} from '../reducers/collections';
 import { selectIntegration, selectPublishedSlugs } from '../reducers';
 import { getIntegrationProvider } from '../integrations';
 import { currentBackend } from '../backend';
@@ -64,6 +69,7 @@ export const ENTRY_FAILURE = 'ENTRY_FAILURE';
 export const ENTRIES_REQUEST = 'ENTRIES_REQUEST';
 export const ENTRIES_SUCCESS = 'ENTRIES_SUCCESS';
 export const ENTRIES_FAILURE = 'ENTRIES_FAILURE';
+export const ENTRIES_PROGRESS = 'ENTRIES_PROGRESS';
 
 export const SORT_ENTRIES_REQUEST = 'SORT_ENTRIES_REQUEST';
 export const SORT_ENTRIES_SUCCESS = 'SORT_ENTRIES_SUCCESS';
@@ -154,6 +160,7 @@ export function entriesLoaded(
   pagination: number | null,
   cursor: Cursor,
   append = true,
+  hasMore = false,
 ) {
   return {
     type: ENTRIES_SUCCESS,
@@ -163,6 +170,7 @@ export function entriesLoaded(
       page: pagination,
       cursor: Cursor.create(cursor),
       append,
+      hasMore,
     },
   };
 }
@@ -173,6 +181,18 @@ export function entriesFailed(collection: Collection, error: Error) {
     error: 'Failed to load entries',
     payload: error.toString(),
     meta: { collection: collection.get('name') },
+  };
+}
+
+export function entriesProgress(collection: Collection, loadedCount: number, totalCount: number) {
+  return {
+    type: ENTRIES_PROGRESS,
+    payload: {
+      collection: collection.get('name'),
+      loadedCount,
+      totalCount,
+      percentage: totalCount > 0 ? Math.round((loadedCount / totalCount) * 100) : 0,
+    },
   };
 }
 
@@ -865,86 +885,140 @@ export function loadEntries(collection: Collection, page = 0) {
         cachedEntries = await getCachedEntries(collectionName);
       }
 
-      let response: {
-        cursor: Cursor;
-        pagination: number;
-        entries: EntryValue[];
-      };
-
       if (cachedEntries) {
         // Use cached entries
         console.log(`[loadEntries] Using cached entries for ${collectionName}`);
-        response = {
+        const response = {
           entries: cachedEntries,
           cursor: Cursor.create({}),
           pagination: 0,
         };
-      } else {
-        // Fetch from backend
-        response = await (loadAllEntries
-          ? // nested collections and i18n collections and i18n collections require all entries to construct the tree/group/group
-            provider.listAllEntries(collection).then((entries: EntryValue[]) => ({ entries }))
-          : provider.listEntries(collection, page));
 
-        // Cache entries if we loaded all of them
-        if (loadAllEntries && response.entries) {
-          await setCachedEntries(collectionName, response.entries);
+        dispatch(
+          entriesLoaded(
+            collection,
+            response.entries,
+            response.pagination,
+            addAppendActionsToCursor(response.cursor),
+            append,
+            false,
+          ),
+        );
+
+        // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
+        if (isI18nCollection && paginationEnabled) {
+          dispatch({
+            type: SORT_ENTRIES_SUCCESS,
+            payload: {
+              collection: collectionName,
+              entries: response.entries,
+            },
+          });
         }
-      }
+      } else if (loadAllEntries) {
+        // Progressive loading for collections that previously loaded everything at once.
+        // We iterate cursor pages and dispatch partial successes so entries appear early.
+        const initial = await provider.listEntries(collection, 0);
+        const cursor: Cursor = Cursor.create(initial.cursor);
+        const usingOld = cursor.meta!.get('usingOldPaginationAPI');
+        const entries = usingOld ? initial.entries.reverse() : initial.entries;
+        const hasMore = cursor.actions!.has('next');
+        const totalCount = cursor.meta?.get('count') || 0;
 
-      response = {
-        ...response,
-        // The only existing backend using the pagination system is the
-        // Algolia integration, which is also the only integration used
-        // to list entries. Thus, this checking for an integration can
-        // determine whether or not this is using the old integer-based
-        // pagination API. Other backends will simply store an empty
-        // cursor, which behaves identically to no cursor at all.
-        cursor: integration
-          ? Cursor.create({
-              actions: ['next'],
-              meta: { usingOldPaginationAPI: true },
-              data: { nextPage: page + 1 },
-            })
-          : Cursor.create(response.cursor),
-      };
-
-      const entries = response.cursor.meta!.get('usingOldPaginationAPI')
-        ? response.entries.reverse()
-        : response.entries;
-
-      dispatch(
-        entriesLoaded(
-          collection,
-          entries,
-          response.pagination,
-          addAppendActionsToCursor(response.cursor),
-          append,
-        ),
-      );
-
-      // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
-      if (isI18nCollection && paginationEnabled) {
-        dispatch({
-          type: SORT_ENTRIES_SUCCESS,
-          payload: {
-            collection: collectionName,
+        // Dispatch initial entries
+        dispatch(
+          entriesLoaded(
+            collection,
             entries,
-          },
-        });
-      }
+            initial.pagination,
+            addAppendActionsToCursor(cursor),
+            false,
+            hasMore,
+          ),
+        );
 
-      // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
-      if (isI18nCollection && paginationEnabled) {
-        dispatch({
-          type: SORT_ENTRIES_SUCCESS,
-          payload: {
-            collection: collection.get('name'),
-            entries,
-          },
-        });
+        // Dispatch progress if we know the total
+        if (totalCount > 0) {
+          dispatch(entriesProgress(collection, entries.length, totalCount));
+        }
+
+        // Stream subsequent pages
+        let currentCursor = cursor;
+        let loadedCount = entries.length;
+        const allEntries: EntryValue[] = [...entries];
+
+        while (currentCursor.actions!.has('next')) {
+          const { entries: moreEntries, cursor: newCursor } = await traverseCursor(
+            provider as unknown as Backend,
+            currentCursor,
+            'next',
+          );
+          const usingOldMore = newCursor.meta!.get('usingOldPaginationAPI');
+          const pageEntries = usingOldMore ? moreEntries.reverse() : moreEntries;
+          const more = newCursor.actions!.has('next');
+          loadedCount += pageEntries.length;
+          allEntries.push(...pageEntries);
+
+          dispatch(
+            entriesLoaded(
+              collection,
+              pageEntries,
+              newCursor.meta?.get('page'),
+              addAppendActionsToCursor(newCursor),
+              true,
+              more,
+            ),
+          );
+
+          // Dispatch progress update
+          if (totalCount > 0) {
+            dispatch(entriesProgress(collection, loadedCount, totalCount));
+          }
+
+          currentCursor = newCursor;
+        }
+
+        // Cache all entries after loading
+        await setCachedEntries(collectionName, allEntries);
+
+        // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
+        if (isI18nCollection && paginationEnabled) {
+          dispatch({
+            type: SORT_ENTRIES_SUCCESS,
+            payload: {
+              collection: collectionName,
+              entries: allEntries,
+            },
+          });
+        }
+      } else {
+        // Regular pagination mode - load single page
+        let response = await provider.listEntries(collection, page);
+        response = {
+          ...response,
+          cursor: integration
+            ? Cursor.create({
+                actions: ['next'],
+                meta: { usingOldPaginationAPI: true },
+                data: { nextPage: page + 1 },
+              })
+            : Cursor.create(response.cursor),
+        };
+        const usingOld = response.cursor.meta!.get('usingOldPaginationAPI');
+        const hasMore = response.cursor.actions!.has('next');
+        dispatch(
+          entriesLoaded(
+            collection,
+            usingOld ? response.entries.reverse() : response.entries,
+            response.pagination,
+            addAppendActionsToCursor(response.cursor),
+            append,
+            hasMore,
+          ),
+        );
       }
     } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
       dispatch(
         addNotification({
           message: {
@@ -955,7 +1029,7 @@ export function loadEntries(collection: Collection, page = 0) {
           dismissAfter: 8000,
         }),
       );
-      return Promise.reject(dispatch(entriesFailed(collection, err)));
+      return Promise.reject(dispatch(entriesFailed(collection, error)));
     }
   };
 }

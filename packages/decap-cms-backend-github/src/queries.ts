@@ -112,6 +112,70 @@ export function files(depth: number) {
   `;
 }
 
+// New paginated tree query using GitHub's tree API with pagination support
+export const treeEntries = gql`
+  query treeEntries(
+    $owner: String!
+    $name: String!
+    $expression: String!
+    $first: Int
+    $after: String
+  ) {
+    repository(owner: $owner, name: $name) {
+      ...RepositoryParts
+      object(expression: $expression) {
+        ... on Tree {
+          entries {
+            ...FileEntryParts
+          }
+        }
+      }
+    }
+  }
+  ${fragments.repository}
+  ${fragments.fileEntry}
+`;
+
+// Query for recursive tree walking with pagination at each level
+export const treeEntriesRecursive = gql`
+  query treeEntriesRecursive($owner: String!, $name: String!, $expression: String!) {
+    repository(owner: $owner, name: $name) {
+      ...RepositoryParts
+      object(expression: $expression) {
+        ...ObjectParts
+        ... on Tree {
+          entries {
+            name
+            sha: oid
+            type
+            blob: object {
+              ... on Blob {
+                size: byteSize
+              }
+            }
+            tree: object {
+              ... on Tree {
+                entries {
+                  name
+                  sha: oid
+                  type
+                  blob: object {
+                    ... on Blob {
+                      size: byteSize
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  ${fragments.repository}
+  ${fragments.object}
+`;
+
 const branchQueryPart = `
 branch: ref(qualifiedName: $qualifiedName) {
   ...BranchParts
@@ -148,6 +212,9 @@ export const repository = gql`
   query repository($owner: String!, $name: String!) {
     repository(owner: $owner, name: $name) {
       ...RepositoryParts
+      defaultBranchRef {
+        name
+      }
     }
   }
   ${fragments.repository}
@@ -210,4 +277,68 @@ export const fileSha = gql`
   }
   ${fragments.repository}
   ${fragments.object}
+`;
+
+// Query to batch fetch commit metadata for multiple files
+export function fileCommits(paths: string[]) {
+  const queries = paths
+    .map(
+      (path, index) => oneLine`
+    file${index}: object(expression: $expression${index}) {
+      ... on Blob {
+        id
+      }
+    }
+    commits${index}: ref(qualifiedName: $branch) {
+      target {
+        ... on Commit {
+          history(first: 1, path: "${path}") {
+            nodes {
+              author {
+                name
+                email
+                date
+              }
+              authoredDate
+            }
+          }
+        }
+      }
+    }
+  `,
+    )
+    .join('\n');
+
+  return gql`
+    query fileCommits($owner: String!, $name: String!, $branch: String!, ${paths
+      .map((_, i) => `$expression${i}: String!`)
+      .join(', ')}) {
+      repository(owner: $owner, name: $name) {
+        ...RepositoryParts
+        ${queries}
+      }
+    }
+    ${fragments.repository}
+  `;
+}
+
+export const codeSearch = gql`
+  query codeSearch($query: String!, $first: Int!, $after: String) {
+    search(query: $query, type: CODE, first: $first, after: $after) {
+      codeCount
+      edges {
+        node {
+          ... on Blob {
+            oid
+            name
+            path
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
 `;
