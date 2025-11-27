@@ -153,20 +153,6 @@ export const treeEntriesRecursive = gql`
                 size: byteSize
               }
             }
-            tree: object {
-              ... on Tree {
-                entries {
-                  name
-                  sha: oid
-                  type
-                  blob: object {
-                    ... on Blob {
-                      size: byteSize
-                    }
-                  }
-                }
-              }
-            }
           }
         }
       }
