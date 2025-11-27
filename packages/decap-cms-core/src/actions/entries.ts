@@ -876,8 +876,9 @@ export function loadEntries(collection: Collection, page = 0) {
     dispatch(entriesLoading(collection));
 
     try {
-      const loadAllEntries = collection.has('nested') || hasI18n(collection);
+      const isNestedCollection = collection.has('nested');
       const isI18nCollection = hasI18n(collection);
+      const loadAllEntries = isNestedCollection || isI18nCollection;
 
       // Try cache first for collections that load all entries
       let cachedEntries: EntryValue[] | null = null;
@@ -915,10 +916,10 @@ export function loadEntries(collection: Collection, page = 0) {
             },
           });
         }
-      } else if (loadAllEntries) {
-        // For nested collections, we need to load ALL entries at once to build the tree
-        // Use getAllEntries which calls allEntriesByFolder with proper depth handling
-        console.log(`[loadEntries] Loading all entries for ${collectionName} (nested or i18n)`);
+      } else if (isNestedCollection) {
+        // For nested collections, we MUST load ALL entries at once with proper depth handling
+        // to build the navigation tree. Use getAllEntries which calls allEntriesByFolder.
+        console.log(`[loadEntries] Loading all entries for nested collection: ${collectionName}`);
         const allEntries = await getAllEntries(state, collection);
         console.log(
           `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
@@ -928,14 +929,35 @@ export function loadEntries(collection: Collection, page = 0) {
 
         // Cache all entries after loading
         await setCachedEntries(collectionName, allEntries);
+      } else if (isI18nCollection) {
+        // For i18n collections, load all entries progressively
+        console.log(`[loadEntries] Loading all entries for i18n collection: ${collectionName}`);
+        const initial = await provider.listEntries(collection, 0);
+        let cursor = Cursor.create(initial.cursor);
+        let entries = initial.entries;
+
+        while (cursor && cursor.actions!.has('append_next')) {
+          const next = await provider.traverseCursor!(cursor, 'append_next');
+          entries = entries.concat(next.entries);
+          cursor = Cursor.create(next.cursor);
+        }
+
+        console.log(
+          `[loadEntries] Progressive loading complete: ${entries.length} entries for ${collectionName}`,
+        );
+
+        dispatch(entriesLoaded(collection, entries, 0, Cursor.create({}), false, false));
+
+        // Cache all entries after loading
+        await setCachedEntries(collectionName, entries);
 
         // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
-        if (isI18nCollection && paginationEnabled) {
+        if (paginationEnabled) {
           dispatch({
             type: SORT_ENTRIES_SUCCESS,
             payload: {
               collection: collectionName,
-              entries: allEntries,
+              entries,
             },
           });
         }
