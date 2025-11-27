@@ -253,7 +253,10 @@ describe('github GraphQL API', () => {
       const api = new GraphQLAPI({ branch: 'main', repo: 'owner/my-repo' });
 
       // Mock the parent class's listFiles method (REST API)
-      const parentListFilesSpy = jest.spyOn(Object.getPrototypeOf(GraphQLAPI.prototype), 'listFiles');
+      const parentListFilesSpy = jest.spyOn(
+        Object.getPrototypeOf(GraphQLAPI.prototype),
+        'listFiles',
+      );
       parentListFilesSpy.mockResolvedValue([
         {
           name: 'file.md',

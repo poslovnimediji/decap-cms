@@ -586,7 +586,9 @@ export default class GitHub implements Implementation {
     const repoURL = this.api!.originRepoURL;
 
     const listFiles = async () => {
-      console.log(`[allEntriesByFolder] folder: ${folder}, depth: ${depth}, useGraphql: ${this.useGraphql}`);
+      console.log(
+        `[allEntriesByFolder] folder: ${folder}, depth: ${depth}, useGraphql: ${this.useGraphql}`,
+      );
       // Use recursive chunked loading for large collections with GraphQL
       // Disable GraphQL for nested collections (depth > 1) - use REST API instead for better compatibility
       if (

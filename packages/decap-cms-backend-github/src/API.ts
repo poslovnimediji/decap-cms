@@ -697,18 +697,21 @@ export default class API {
       );
       console.log(`[API.listFiles] GitHub returned ${result.tree.length} items`);
       const files = result.tree
-          // filter only files (blobs) - when recursive=1, GitHub returns all nested files
-          .filter(file => file.type === 'blob')
-          .map(file => ({
-            type: file.type,
-            id: file.sha,
-            name: basename(file.path),
-            path: `${folder}/${file.path}`,
-            size: file.size!,
-          }));
+        // filter only files (blobs) - when recursive=1, GitHub returns all nested files
+        .filter(file => file.type === 'blob')
+        .map(file => ({
+          type: file.type,
+          id: file.sha,
+          name: basename(file.path),
+          path: `${folder}/${file.path}`,
+          size: file.size!,
+        }));
       console.log(`[API.listFiles] Returning ${files.length} files after filtering blobs`);
       if (files.length > 0) {
-        console.log(`[API.listFiles] Sample paths:`, files.slice(0, 5).map(f => f.path));
+        console.log(
+          `[API.listFiles] Sample paths:`,
+          files.slice(0, 5).map(f => f.path),
+        );
       }
       return files;
     } catch (err) {

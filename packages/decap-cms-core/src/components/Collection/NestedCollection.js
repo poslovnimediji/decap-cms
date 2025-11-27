@@ -154,9 +154,16 @@ export function getTreeData(collection, entries) {
   const entriesObj = entries
     .toJS()
     .map(e => ({ ...e, path: e.path.slice(collectionFolder.length) }));
-  console.log(`[NestedCollection.getTreeData] collection: ${collection.get('name')}, folder: ${collectionFolder}, entries count: ${entriesObj.length}`);
+  console.log(
+    `[NestedCollection.getTreeData] collection: ${collection.get(
+      'name',
+    )}, folder: ${collectionFolder}, entries count: ${entriesObj.length}`,
+  );
   if (entriesObj.length > 0) {
-    console.log(`[NestedCollection.getTreeData] Sample entry paths:`, entriesObj.slice(0, 5).map(e => e.path));
+    console.log(
+      `[NestedCollection.getTreeData] Sample entry paths:`,
+      entriesObj.slice(0, 5).map(e => e.path),
+    );
   }
 
   const dirs = entriesObj.reduce((acc, entry) => {

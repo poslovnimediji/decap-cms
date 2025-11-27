@@ -669,15 +669,17 @@ export class Backend {
       const extension = selectFolderEntryExtension(collection);
       const collectionName = collection.get('name');
       const folder = collection.get('folder') as string;
-      console.log(`[backend.listAllEntries] collection: ${collectionName}, folder: ${folder}, depth: ${depth}, isNested: ${isNested(collection)}`);\n      return this.implementation
-        .allEntriesByFolder(
-          folder,
-          extension,
-          depth,
-          collectionRegex(collection),
-        )
+      console.log(
+        `[backend.listAllEntries] collection: ${collectionName}, folder: ${folder}, depth: ${depth}, isNested: ${isNested(
+          collection,
+        )}`,
+      );
+      return this.implementation
+        .allEntriesByFolder(folder, extension, depth, collectionRegex(collection))
         .then(entries => {
-          console.log(`[backend.listAllEntries] allEntriesByFolder returned ${entries.length} entries`);
+          console.log(
+            `[backend.listAllEntries] allEntriesByFolder returned ${entries.length} entries`,
+          );
           return this.processEntries(entries, collection);
         });
     }
