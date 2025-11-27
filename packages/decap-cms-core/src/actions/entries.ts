@@ -916,67 +916,15 @@ export function loadEntries(collection: Collection, page = 0) {
           });
         }
       } else if (loadAllEntries) {
-        // Progressive loading for collections that previously loaded everything at once.
-        // We iterate cursor pages and dispatch partial successes so entries appear early.
-        const initial = await provider.listEntries(collection, 0);
-        const cursor: Cursor = Cursor.create(initial.cursor);
-        const usingOld = cursor.meta!.get('usingOldPaginationAPI');
-        const entries = usingOld ? initial.entries.reverse() : initial.entries;
-        const hasMore = cursor.actions!.has('next');
-        const totalCount = cursor.meta?.get('count') || 0;
-
-        // Dispatch initial entries
-        dispatch(
-          entriesLoaded(
-            collection,
-            entries,
-            initial.pagination,
-            addAppendActionsToCursor(cursor),
-            false,
-            hasMore,
-          ),
+        // For nested collections, we need to load ALL entries at once to build the tree
+        // Use getAllEntries which calls allEntriesByFolder with proper depth handling
+        console.log(`[loadEntries] Loading all entries for ${collectionName} (nested or i18n)`);
+        const allEntries = await getAllEntries(state, collection);
+        console.log(
+          `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
         );
 
-        // Dispatch progress if we know the total
-        if (totalCount > 0) {
-          dispatch(entriesProgress(collection, entries.length, totalCount));
-        }
-
-        // Stream subsequent pages
-        let currentCursor = cursor;
-        let loadedCount = entries.length;
-        const allEntries: EntryValue[] = [...entries];
-
-        while (currentCursor.actions!.has('next')) {
-          const { entries: moreEntries, cursor: newCursor } = await traverseCursor(
-            provider as unknown as Backend,
-            currentCursor,
-            'next',
-          );
-          const usingOldMore = newCursor.meta!.get('usingOldPaginationAPI');
-          const pageEntries = usingOldMore ? moreEntries.reverse() : moreEntries;
-          const more = newCursor.actions!.has('next');
-          loadedCount += pageEntries.length;
-          allEntries.push(...pageEntries);
-
-          dispatch(
-            entriesLoaded(
-              collection,
-              pageEntries,
-              newCursor.meta?.get('page'),
-              addAppendActionsToCursor(newCursor),
-              true,
-              more,
-            ),
-          );
-
-          // Dispatch progress update
-          if (totalCount > 0) {
-            dispatch(entriesProgress(collection, loadedCount, totalCount));
-          }
-
-          currentCursor = newCursor;
-        }
+        dispatch(entriesLoaded(collection, allEntries, 0, Cursor.create({}), false, false));
 
         // Cache all entries after loading
         await setCachedEntries(collectionName, allEntries);
