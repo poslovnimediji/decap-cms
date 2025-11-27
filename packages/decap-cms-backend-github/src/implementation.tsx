@@ -586,6 +586,7 @@ export default class GitHub implements Implementation {
     const repoURL = this.api!.originRepoURL;
 
     const listFiles = async () => {
+      console.log(`[allEntriesByFolder] folder: ${folder}, depth: ${depth}, useGraphql: ${this.useGraphql}`);
       // Use recursive chunked loading for large collections with GraphQL
       // Disable GraphQL for nested collections (depth > 1) - use REST API instead for better compatibility
       if (
@@ -595,6 +596,7 @@ export default class GitHub implements Implementation {
         'listFilesRecursive' in this.api &&
         typeof this.api.listFilesRecursive === 'function'
       ) {
+        console.log(`[allEntriesByFolder] Using GraphQL listFilesRecursive`);
         const files = await this.api.listFilesRecursive(folder, {
           repoURL,
           maxDepth: depth,
@@ -606,10 +608,12 @@ export default class GitHub implements Implementation {
         );
       } else {
         // Fallback to original implementation
+        console.log(`[allEntriesByFolder] Using REST API listFiles with depth: ${depth}`);
         const files = await this.api!.listFiles(folder, {
           repoURL,
           depth,
         });
+        console.log(`[allEntriesByFolder] REST API returned ${files.length} files`);
         return files.filter(
           file => (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
         );

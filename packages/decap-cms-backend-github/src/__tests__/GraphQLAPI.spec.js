@@ -249,40 +249,33 @@ describe('github GraphQL API', () => {
       expect(api.query).toHaveBeenCalledTimes(1);
     });
 
-    it('should automatically use listFilesRecursive for depth > 3 to avoid 502 errors', async () => {
+    it('should use REST API for nested collections (depth > 1)', async () => {
       const api = new GraphQLAPI({ branch: 'main', repo: 'owner/my-repo' });
 
-      // Spy on listFilesRecursive to verify it's called
-      const listFilesRecursiveSpy = jest.spyOn(api, 'listFilesRecursive');
-
-      api.query = jest.fn().mockResolvedValue({
-        data: {
-          repository: {
-            object: {
-              entries: [
-                {
-                  name: 'file.md',
-                  sha: 'sha-1',
-                  type: 'blob',
-                  blob: { size: 100 },
-                },
-              ],
-            },
-          },
+      // Mock the parent class's listFiles method (REST API)
+      const parentListFilesSpy = jest.spyOn(Object.getPrototypeOf(GraphQLAPI.prototype), 'listFiles');
+      parentListFilesSpy.mockResolvedValue([
+        {
+          name: 'file.md',
+          path: 'posts/file.md',
+          type: 'blob',
+          id: 'sha-1',
+          size: 100,
         },
-      });
+      ]);
 
-      // Call listFiles with large depth (e.g., 100 which would cause 502)
-      await api.listFiles('posts', { depth: 100 });
+      // Call listFiles with depth > 1 (nested collection)
+      const result = await api.listFiles('posts', { depth: 10 });
 
-      // Should have delegated to listFilesRecursive
-      expect(listFilesRecursiveSpy).toHaveBeenCalledWith('posts', {
+      // Should have delegated to parent's REST API listFiles
+      expect(parentListFilesSpy).toHaveBeenCalledWith('posts', {
         repoURL: api.repoURL,
         branch: 'main',
-        maxDepth: 100,
+        depth: 10,
       });
 
-      listFilesRecursiveSpy.mockRestore();
+      expect(result).toHaveLength(1);
+      parentListFilesSpy.mockRestore();
     });
   });
 
