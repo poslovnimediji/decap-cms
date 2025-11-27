@@ -667,14 +667,19 @@ export class Backend {
     if (collection.get('folder') && this.implementation.allEntriesByFolder) {
       const depth = collectionDepth(collection);
       const extension = selectFolderEntryExtension(collection);
-      return this.implementation
+      const collectionName = collection.get('name');
+      const folder = collection.get('folder') as string;
+      console.log(`[backend.listAllEntries] collection: ${collectionName}, folder: ${folder}, depth: ${depth}, isNested: ${isNested(collection)}`);\n      return this.implementation
         .allEntriesByFolder(
-          collection.get('folder') as string,
+          folder,
           extension,
           depth,
           collectionRegex(collection),
         )
-        .then(entries => this.processEntries(entries, collection));
+        .then(entries => {
+          console.log(`[backend.listAllEntries] allEntriesByFolder returned ${entries.length} entries`);
+          return this.processEntries(entries, collection);
+        });
     }
 
     const response = await this.listEntries(collection);

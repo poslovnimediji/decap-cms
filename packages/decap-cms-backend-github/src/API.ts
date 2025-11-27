@@ -684,6 +684,8 @@ export default class API {
     { repoURL = this.repoURL, branch = this.branch, depth = 1 } = {},
   ): Promise<{ type: string; id: string; name: string; path: string; size: number }[]> {
     const folder = trim(path, '/');
+    const useRecursive = depth > 1;
+    console.log(`[API.listFiles] path: ${path}, depth: ${depth}, recursive: ${useRecursive}`);
     try {
       const result: Octokit.GitGetTreeResponse = await this.request(
         `${repoURL}/git/trees/${branch}:${folder}`,
@@ -693,8 +695,8 @@ export default class API {
           params: depth > 1 ? { recursive: 1 } : {},
         },
       );
-      return (
-        result.tree
+      console.log(`[API.listFiles] GitHub returned ${result.tree.length} items`);
+      const files = result.tree
           // filter only files (blobs) - when recursive=1, GitHub returns all nested files
           .filter(file => file.type === 'blob')
           .map(file => ({
@@ -703,8 +705,12 @@ export default class API {
             name: basename(file.path),
             path: `${folder}/${file.path}`,
             size: file.size!,
-          }))
-      );
+          }));
+      console.log(`[API.listFiles] Returning ${files.length} files after filtering blobs`);
+      if (files.length > 0) {
+        console.log(`[API.listFiles] Sample paths:`, files.slice(0, 5).map(f => f.path));
+      }
+      return files;
     } catch (err) {
       if (err && err.status === 404) {
         console.log('This 404 was expected and handled appropriately.');

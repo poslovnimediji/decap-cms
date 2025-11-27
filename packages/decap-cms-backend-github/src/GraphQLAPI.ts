@@ -441,11 +441,16 @@ export default class GraphQLAPI extends API {
   }
 
   async listFiles(path: string, { repoURL = this.repoURL, branch = this.branch, depth = 1 } = {}) {
+    console.log(`[GraphQLAPI.listFiles] path: ${path}, depth: ${depth}, repoURL: ${repoURL}`);
     // For nested collections (depth > 1), use REST API instead of GraphQL to avoid complexity issues
     if (depth > 1) {
-      return super.listFiles(path, { repoURL, branch, depth });
+      console.log(`[GraphQLAPI.listFiles] depth > 1, delegating to REST API (super.listFiles)`);
+      const result = await super.listFiles(path, { repoURL, branch, depth });
+      console.log(`[GraphQLAPI.listFiles] REST API returned ${result.length} files`);
+      return result;
     }
 
+    console.log(`[GraphQLAPI.listFiles] depth === 1, using GraphQL query`);
     const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
     const folder = trim(path, '/');
 
@@ -457,8 +462,10 @@ export default class GraphQLAPI extends API {
 
     if (data.repository.object) {
       const allFiles = this.getAllFiles(data.repository.object.entries, folder);
+      console.log(`[GraphQLAPI.listFiles] GraphQL returned ${allFiles.length} files`);
       return allFiles;
     } else {
+      console.log(`[GraphQLAPI.listFiles] GraphQL returned no object`);
       return [];
     }
   }
