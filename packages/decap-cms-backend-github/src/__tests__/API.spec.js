@@ -727,7 +727,18 @@ describe('github API', () => {
     it('should get files by depth', async () => {
       const api = new API({ branch: 'master', repo: 'owner/repo' });
 
-      const tree = [
+      const nonRecursiveTree = [
+        {
+          path: 'post.md',
+          type: 'blob',
+        },
+        {
+          path: 'dir1',
+          type: 'tree',
+        },
+      ];
+
+      const recursiveTree = [
         {
           path: 'post.md',
           type: 'blob',
@@ -749,13 +760,20 @@ describe('github API', () => {
           type: 'blob',
         },
       ];
-      api.request = jest.fn().mockResolvedValue({ tree });
 
+      api.request = jest.fn().mockImplementation((url, options) => {
+        const tree = options?.params?.recursive === 1 ? recursiveTree : nonRecursiveTree;
+        return Promise.resolve({ tree });
+      });
+
+      // depth: 1 (no recursive param) - returns only immediate files
       await expect(api.listFiles('posts', { depth: 1 })).resolves.toEqual([
         {
           path: 'posts/post.md',
           type: 'blob',
           name: 'post.md',
+          id: undefined,
+          size: undefined,
         },
       ]);
       expect(api.request).toHaveBeenCalledTimes(1);
@@ -764,16 +782,28 @@ describe('github API', () => {
       });
 
       jest.clearAllMocks();
+      // depth: 2 (recursive=1) - returns ALL files at all levels
       await expect(api.listFiles('posts', { depth: 2 })).resolves.toEqual([
         {
           path: 'posts/post.md',
           type: 'blob',
           name: 'post.md',
+          id: undefined,
+          size: undefined,
         },
         {
           path: 'posts/dir1/nested-post.md',
           type: 'blob',
           name: 'nested-post.md',
+          id: undefined,
+          size: undefined,
+        },
+        {
+          path: 'posts/dir1/dir2/nested-post.md',
+          type: 'blob',
+          name: 'nested-post.md',
+          id: undefined,
+          size: undefined,
         },
       ]);
       expect(api.request).toHaveBeenCalledTimes(1);

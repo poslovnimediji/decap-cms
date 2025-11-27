@@ -695,8 +695,8 @@ export default class API {
       );
       return (
         result.tree
-          // filter only files and up to the required depth
-          .filter(file => file.type === 'blob' && file.path.split('/').length <= depth)
+          // filter only files (blobs) - when recursive=1, GitHub returns all nested files
+          .filter(file => file.type === 'blob')
           .map(file => ({
             type: file.type,
             id: file.sha,

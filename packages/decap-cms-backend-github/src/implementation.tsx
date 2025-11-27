@@ -587,9 +587,10 @@ export default class GitHub implements Implementation {
 
     const listFiles = async () => {
       // Use recursive chunked loading for large collections with GraphQL
+      // Disable GraphQL for nested collections (depth > 1) - use REST API instead for better compatibility
       if (
         this.useGraphql &&
-        depth >= 1 &&
+        depth === 1 &&
         this.api &&
         'listFilesRecursive' in this.api &&
         typeof this.api.listFilesRecursive === 'function'
