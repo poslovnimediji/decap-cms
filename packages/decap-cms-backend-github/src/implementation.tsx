@@ -453,7 +453,7 @@ export default class GitHub implements Implementation {
       actions.push('first');
     }
     if (page < pageCount) {
-      actions.push('next');
+      actions.push('append_next');
       actions.push('last');
     }
 
@@ -499,7 +499,7 @@ export default class GitHub implements Implementation {
         const filtered = result.files.filter((file: ApiFile) => filterByExtension(file, extension));
 
         cursor = Cursor.create({
-          actions: result.hasMore ? ['next', 'last'] : [],
+          actions: result.hasMore ? ['append_next', 'last'] : [],
           meta: {
             page: result.page,
             count: result.totalCount,
