@@ -936,10 +936,17 @@ export function loadEntries(collection: Collection, page = 0) {
         let cursor = Cursor.create(initial.cursor);
         let entries = initial.entries;
 
+        console.log(`[loadEntries] Initial load: ${entries.length} entries`);
+        console.log(`[loadEntries] Cursor actions:`, cursor.actions?.toJS());
+        console.log(`[loadEntries] Has append_next:`, cursor.actions?.has('append_next'));
+
         while (cursor && cursor.actions!.has('append_next')) {
+          console.log(`[loadEntries] Fetching next page...`);
           const next = await provider.traverseCursor!(cursor, 'append_next');
+          console.log(`[loadEntries] Next page returned: ${next.entries.length} entries`);
           entries = entries.concat(next.entries);
           cursor = Cursor.create(next.cursor);
+          console.log(`[loadEntries] New cursor actions:`, cursor.actions?.toJS());
         }
 
         console.log(
