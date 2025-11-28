@@ -515,25 +515,58 @@ export default class GraphQLAPI extends API {
   }> {
     const { repoURL = this.repoURL, branch = this.branch, pageSize = 20, page = 1 } = options;
 
-    // For now, we still load all files and paginate in memory
-    // GitHub's GraphQL API doesn't support pagination on tree entries directly
-    // This is a transition implementation that maintains backward compatibility
-    // while setting up the structure for future improvements
-    const allFiles = await this.listFiles(path, { repoURL, branch, depth: 1 });
+    console.log(
+      `[GraphQLAPI.listFilesPaginated] path: ${path}, page: ${page}, pageSize: ${pageSize}`,
+    );
 
-    const totalCount = allFiles.length;
-    const pageCount = Math.ceil(totalCount / pageSize);
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const files = allFiles.slice(startIndex, endIndex);
+    // Use chunked recursive loading to avoid overwhelming GraphQL API with large collections
+    // This batches requests and avoids 502 errors for collections with many files
+    try {
+      const allFiles = await this.listFilesRecursive(path, {
+        repoURL,
+        branch,
+        maxDepth: 1, // Only load files in this directory, not subdirectories
+        chunkSize: 50, // Process in chunks to avoid API limits
+      });
 
-    return {
-      files,
-      hasMore: page < pageCount,
-      totalCount,
-      page,
-      pageCount,
-    };
+      console.log(
+        `[GraphQLAPI.listFilesPaginated] Loaded ${allFiles.length} total files via chunked GraphQL`,
+      );
+
+      const totalCount = allFiles.length;
+      const pageCount = Math.ceil(totalCount / pageSize);
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const files = allFiles.slice(startIndex, endIndex);
+
+      return {
+        files,
+        hasMore: page < pageCount,
+        totalCount,
+        page,
+        pageCount,
+      };
+    } catch (error) {
+      console.error(`[GraphQLAPI.listFilesPaginated] Chunked GraphQL failed:`, error);
+      console.log(`[GraphQLAPI.listFilesPaginated] Falling back to REST API`);
+
+      // Fallback to REST API if GraphQL fails
+      const allFiles = await super.listFiles(path, { repoURL, branch, depth: 1 });
+
+      const totalCount = allFiles.length;
+      const pageCount = Math.ceil(totalCount / pageSize);
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const files = allFiles.slice(startIndex, endIndex);
+
+      return {
+        files,
+        hasMore: page < pageCount,
+        totalCount,
+        page,
+        pageCount,
+      };
+    }
   }
 
   /**
