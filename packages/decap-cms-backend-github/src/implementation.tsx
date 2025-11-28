@@ -943,7 +943,7 @@ export default class GitHub implements Implementation {
       );
 
       const newCursor = Cursor.create({
-        actions: pageResult.hasMore ? ['prev', 'first', 'next', 'last'] : ['prev', 'first'],
+        actions: pageResult.hasMore ? ['prev', 'first', 'append_next', 'last'] : ['prev', 'first'],
         meta: {
           page: pageResult.page,
           count: pageResult.totalCount,

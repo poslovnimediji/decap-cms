@@ -930,33 +930,19 @@ export function loadEntries(collection: Collection, page = 0) {
         // Cache all entries after loading
         await setCachedEntries(collectionName, allEntries);
       } else if (isI18nCollection) {
-        // For i18n collections, load all entries progressively
+        // For i18n collections, we MUST load ALL entries at once and process them together
+        // so that i18n grouping works correctly (entries in different locales get grouped).
+        // Use getAllEntries which calls listAllEntries that processes all entries together.
         console.log(`[loadEntries] Loading all entries for i18n collection: ${collectionName}`);
-        const initial = await provider.listEntries(collection, 0);
-        let cursor = Cursor.create(initial.cursor);
-        let entries = initial.entries;
-
-        console.log(`[loadEntries] Initial load: ${entries.length} entries`);
-        console.log(`[loadEntries] Cursor actions:`, cursor.actions?.toJS());
-        console.log(`[loadEntries] Has append_next:`, cursor.actions?.has('append_next'));
-
-        while (cursor && cursor.actions!.has('append_next')) {
-          console.log(`[loadEntries] Fetching next page...`);
-          const next = await provider.traverseCursor!(cursor, 'append_next');
-          console.log(`[loadEntries] Next page returned: ${next.entries.length} entries`);
-          entries = entries.concat(next.entries);
-          cursor = Cursor.create(next.cursor);
-          console.log(`[loadEntries] New cursor actions:`, cursor.actions?.toJS());
-        }
-
+        const allEntries = await getAllEntries(state, collection);
         console.log(
-          `[loadEntries] Progressive loading complete: ${entries.length} entries for ${collectionName}`,
+          `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
         );
 
-        dispatch(entriesLoaded(collection, entries, 0, Cursor.create({}), false, false));
+        dispatch(entriesLoaded(collection, allEntries, 0, Cursor.create({}), false, false));
 
         // Cache all entries after loading
-        await setCachedEntries(collectionName, entries);
+        await setCachedEntries(collectionName, allEntries);
 
         // For i18n collections with pagination enabled, set up client-side pagination using sortedIds
         if (paginationEnabled) {
@@ -964,7 +950,7 @@ export function loadEntries(collection: Collection, page = 0) {
             type: SORT_ENTRIES_SUCCESS,
             payload: {
               collection: collectionName,
-              entries,
+              entries: allEntries,
             },
           });
         }
