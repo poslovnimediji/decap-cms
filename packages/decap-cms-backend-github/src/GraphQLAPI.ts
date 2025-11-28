@@ -453,20 +453,44 @@ export default class GraphQLAPI extends API {
     console.log(`[GraphQLAPI.listFiles] depth === 1, using GraphQL query`);
     const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
     const folder = trim(path, '/');
+    console.log(
+      `[GraphQLAPI.listFiles] Querying: owner=${owner}, name=${name}, branch=${branch}, folder=${folder}`,
+    );
 
-    const { data } = await this.query({
-      query: queries.files(depth),
-      variables: { owner, name, expression: `${branch}:${folder}` },
-      fetchPolicy: NO_CACHE, // Directory contents can change
-    });
+    try {
+      const { data } = await this.query({
+        query: queries.files(depth),
+        variables: { owner, name, expression: `${branch}:${folder}` },
+        fetchPolicy: NO_CACHE, // Directory contents can change
+      });
 
-    if (data.repository.object) {
-      const allFiles = this.getAllFiles(data.repository.object.entries, folder);
-      console.log(`[GraphQLAPI.listFiles] GraphQL returned ${allFiles.length} files`);
-      return allFiles;
-    } else {
-      console.log(`[GraphQLAPI.listFiles] GraphQL returned no object`);
-      return [];
+      console.log(`[GraphQLAPI.listFiles] GraphQL response data:`, {
+        hasRepository: !!data.repository,
+        hasObject: !!data.repository?.object,
+        objectType: data.repository?.object?.type,
+      });
+
+      if (data.repository.object) {
+        const allFiles = this.getAllFiles(data.repository.object.entries, folder);
+        console.log(`[GraphQLAPI.listFiles] GraphQL returned ${allFiles.length} files`);
+        return allFiles;
+      } else {
+        console.warn(
+          `[GraphQLAPI.listFiles] GraphQL returned no object for path "${folder}" - path may not exist in branch "${branch}"`,
+        );
+        console.log(`[GraphQLAPI.listFiles] Falling back to REST API to verify`);
+        // Path doesn't exist or GraphQL can't access it, fallback to REST API
+        return super.listFiles(path, { repoURL, branch, depth });
+      }
+    } catch (error) {
+      console.error(`[GraphQLAPI.listFiles] GraphQL query failed for path "${folder}":`, {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      console.log(`[GraphQLAPI.listFiles] Falling back to REST API`);
+      // On any GraphQL error, fallback to REST API
+      return super.listFiles(path, { repoURL, branch, depth });
     }
   }
 
@@ -529,8 +553,14 @@ export default class GraphQLAPI extends API {
     const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
     const folder = trim(path, '/');
 
+    console.log(
+      `[GraphQLAPI.listFilesRecursive] Starting: path=${folder}, branch=${branch}, maxDepth=${maxDepth}`,
+    );
+
     const allFiles: TreeFile[] = [];
     const dirsToProcess: Array<{ path: string; depth: number }> = [{ path: folder, depth: 0 }];
+    let dirsProcessed = 0;
+    let errorCount = 0;
 
     while (dirsToProcess.length > 0) {
       // Process directories in chunks to avoid overwhelming the API
@@ -549,8 +579,15 @@ export default class GraphQLAPI extends API {
               fetchPolicy: NO_CACHE, // Directory contents can change
             });
 
+            dirsProcessed++;
+
             if (data.repository.object && data.repository.object.entries) {
-              for (const entry of data.repository.object.entries) {
+              const entries = data.repository.object.entries;
+              console.log(
+                `[GraphQLAPI.listFilesRecursive] Processed dir "${dirPath}": ${entries.length} entries`,
+              );
+
+              for (const entry of entries) {
                 const fullPath = dirPath ? `${dirPath}/${entry.name}` : entry.name;
 
                 if (entry.type === 'blob') {
@@ -566,15 +603,26 @@ export default class GraphQLAPI extends API {
                   dirsToProcess.push({ path: fullPath, depth: depth + 1 });
                 }
               }
+            } else {
+              console.warn(
+                `[GraphQLAPI.listFilesRecursive] No object returned for path "${dirPath}" - may not exist`,
+              );
             }
           } catch (error) {
-            console.error(`Error loading files from ${dirPath}:`, error);
+            errorCount++;
+            console.error(`[GraphQLAPI.listFilesRecursive] Error loading files from ${dirPath}:`, {
+              error,
+              message: error instanceof Error ? error.message : String(error),
+            });
             // Continue processing other directories
           }
         }),
       );
     }
 
+    console.log(
+      `[GraphQLAPI.listFilesRecursive] Complete: ${allFiles.length} files from ${dirsProcessed} directories, ${errorCount} errors`,
+    );
     return allFiles;
   }
 
