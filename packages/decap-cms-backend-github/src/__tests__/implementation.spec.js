@@ -208,7 +208,7 @@ describe('github backend implementation', () => {
         .map(({ id, path }) => ({ data: id, file: { path, id, author: '', updatedOn: '' } }));
 
       const expectedCursor = Cursor.create({
-        actions: ['append_next', 'last'],
+        actions: ['next', 'last'],
         meta: { page: 1, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
@@ -251,7 +251,7 @@ describe('github backend implementation', () => {
       gitHubImplementation.api = mockAPI;
 
       const cursor = Cursor.create({
-        actions: ['append_next', 'last'],
+        actions: ['next', 'last'],
         meta: { page: 1, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
@@ -261,7 +261,7 @@ describe('github backend implementation', () => {
         .map(({ id, path }) => ({ data: id, file: { path, id } }));
 
       const expectedCursor = Cursor.create({
-        actions: ['prev', 'first', 'append_next', 'last'],
+        actions: ['prev', 'first', 'next', 'last'],
         meta: { page: 2, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
@@ -279,7 +279,7 @@ describe('github backend implementation', () => {
       gitHubImplementation.api = mockAPI;
 
       const cursor = Cursor.create({
-        actions: ['prev', 'first', 'append_next', 'last'],
+        actions: ['prev', 'first', 'next', 'last'],
         meta: { page: 2, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
@@ -289,7 +289,7 @@ describe('github backend implementation', () => {
         .map(({ id, path }) => ({ data: id, file: { path, id } }));
 
       const expectedCursor = Cursor.create({
-        actions: ['append_next', 'last'],
+        actions: ['next', 'last'],
         meta: { page: 1, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
@@ -307,7 +307,7 @@ describe('github backend implementation', () => {
       gitHubImplementation.api = mockAPI;
 
       const cursor = Cursor.create({
-        actions: ['append_next', 'last'],
+        actions: ['next', 'last'],
         meta: { page: 1, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
@@ -345,7 +345,7 @@ describe('github backend implementation', () => {
         .map(({ id, path }) => ({ data: id, file: { path, id } }));
 
       const expectedCursor = Cursor.create({
-        actions: ['append_next', 'last'],
+        actions: ['next', 'last'],
         meta: { page: 1, count, pageSize: 20, pageCount: 76 },
         data: { files },
       });
