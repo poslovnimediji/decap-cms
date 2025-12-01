@@ -501,8 +501,12 @@ export default class GitHub implements Implementation {
             filterByExtension(file, extension),
           );
 
+          console.log(
+            `[entriesByFolder] GraphQL pagination succeeded: ${filtered.length} files, hasMore: ${result.hasMore}, page: ${result.page}/${result.pageCount}`,
+          );
+
           cursor = Cursor.create({
-            actions: result.hasMore ? ['append_next', 'last'] : [],
+            actions: result.hasMore ? ['next', 'last'] : [],
             meta: {
               page: result.page,
               count: result.totalCount,
@@ -512,24 +516,36 @@ export default class GitHub implements Implementation {
             data: { folder, extension, repoURL },
           });
 
+          console.log(
+            `[entriesByFolder] Created cursor with actions: ${JSON.stringify(cursor.actions?.toArray())}`,
+          );
+
           return filtered;
         } catch (error) {
           // If GraphQL pagination fails, fall back to loading all files in memory
           console.log(
-            `[entriesByFolder] listFilesPaginated failed, falling back to in-memory pagination`,
+            `[entriesByFolder] listFilesPaginated failed: ${error}, falling back to REST API + in-memory pagination`,
           );
           // Fall through to the REST API path below
         }
       }
 
       // Fallback to original implementation with in-memory pagination
+      console.log(
+        `[entriesByFolder] Using REST API fallback for folder: ${folder}, requesting page: ${page}`,
+      );
       const files = await this.api!.listFiles(folder, {
         repoURL,
         depth,
       });
+      console.log(`[entriesByFolder] REST API returned ${files.length} files`);
       const filtered = files.filter(file => filterByExtension(file, extension));
+      console.log(`[entriesByFolder] Filtered to ${filtered.length} files with extension: ${extension}`);
       const result = this.getCursorAndFiles(filtered, page, pageSize);
       cursor = result.cursor;
+      console.log(
+        `[entriesByFolder] Created cursor with actions: ${JSON.stringify(cursor.actions?.toArray())}, returning ${result.files.length} files for page ${page}`,
+      );
       return result.files;
     };
 

@@ -833,13 +833,21 @@ const appendActions = fromJS({
 });
 
 function addAppendActionsToCursor(cursor: Cursor) {
-  return Cursor.create(cursor).updateStore('actions', (actions: Set<string>) => {
+  const originalActions = cursor.actions?.toArray() || [];
+  console.log(`[addAppendActionsToCursor] Original cursor actions: ${JSON.stringify(originalActions)}`);
+  
+  const updatedCursor = Cursor.create(cursor).updateStore('actions', (actions: Set<string>) => {
     return actions.union(
       appendActions
         .filter((v: Map<string, string | boolean>) => actions.has(v.get('action') as string))
         .keySeq(),
     );
   });
+  
+  const newActions = updatedCursor.actions?.toArray() || [];
+  console.log(`[addAppendActionsToCursor] Updated cursor actions: ${JSON.stringify(newActions)}`);
+  
+  return updatedCursor;
 }
 
 export function loadEntries(collection: Collection, page = 0) {
@@ -1045,7 +1053,13 @@ export function traverseCollectionCursor(collection: Collection, action: string)
 
     try {
       dispatch(entriesLoading(collection));
+      console.log(
+        `[traverseCollectionCursor] Calling traverseCursor with action: ${action}, realAction: ${realAction}, cursor actions: ${JSON.stringify(cursor.actions?.toArray())}`,
+      );
       const { entries, cursor: newCursor } = await traverseCursor(backend, cursor, realAction);
+      console.log(
+        `[traverseCollectionCursor] traverseCursor succeeded, got ${entries.length} entries, new cursor actions: ${JSON.stringify(newCursor.actions?.toArray())}`,
+      );
 
       const pagination = newCursor.meta?.get('page');
       return dispatch(
