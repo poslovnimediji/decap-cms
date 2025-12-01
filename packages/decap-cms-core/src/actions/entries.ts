@@ -972,6 +972,19 @@ export function loadEntries(collection: Collection, page = 0) {
             },
           });
         }
+      } else if (useGraphQL && loadAllEntries) {
+        // For GraphQL collections, load ALL entries progressively in batches
+        // GraphQL handles batching automatically via listFilesPaginated
+        console.log(`[loadEntries] Loading all entries for GraphQL collection: ${collectionName}`);
+        const allEntries = await getAllEntries(state, collection);
+        console.log(
+          `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
+        );
+
+        dispatch(entriesLoaded(collection, allEntries, 0, Cursor.create({}), false, false));
+
+        // Cache all entries after loading
+        await setCachedEntries(collectionName, allEntries);
       } else {
         // Regular pagination mode - load single page
         let response = await provider.listEntries(collection, page);
