@@ -490,37 +490,47 @@ export default class GitHub implements Implementation {
         'listFilesPaginated' in this.api &&
         typeof this.api.listFilesPaginated === 'function'
       ) {
-        const result = await this.api.listFilesPaginated(folder, {
-          repoURL,
-          pageSize: 20,
-          page: 1,
-        });
-
-        const filtered = result.files.filter((file: ApiFile) => filterByExtension(file, extension));
-
-        cursor = Cursor.create({
-          actions: result.hasMore ? ['append_next', 'last'] : [],
-          meta: {
-            page: result.page,
-            count: result.totalCount,
+        try {
+          const result = await this.api.listFilesPaginated(folder, {
+            repoURL,
             pageSize: 20,
-            pageCount: result.pageCount,
-          },
-          data: { folder, extension, repoURL },
-        });
+            page: 1,
+          });
 
-        return filtered;
-      } else {
-        // Fallback to original implementation
-        const files = await this.api!.listFiles(folder, {
-          repoURL,
-          depth,
-        });
-        const filtered = files.filter(file => filterByExtension(file, extension));
-        const result = this.getCursorAndFiles(filtered, page, pageSize);
-        cursor = result.cursor;
-        return result.files;
+          const filtered = result.files.filter((file: ApiFile) =>
+            filterByExtension(file, extension),
+          );
+
+          cursor = Cursor.create({
+            actions: result.hasMore ? ['append_next', 'last'] : [],
+            meta: {
+              page: result.page,
+              count: result.totalCount,
+              pageSize: 20,
+              pageCount: result.pageCount,
+            },
+            data: { folder, extension, repoURL },
+          });
+
+          return filtered;
+        } catch (error) {
+          // If GraphQL pagination fails, fall back to loading all files in memory
+          console.log(
+            `[entriesByFolder] listFilesPaginated failed, falling back to in-memory pagination`,
+          );
+          // Fall through to the REST API path below
+        }
       }
+
+      // Fallback to original implementation with in-memory pagination
+      const files = await this.api!.listFiles(folder, {
+        repoURL,
+        depth,
+      });
+      const filtered = files.filter(file => filterByExtension(file, extension));
+      const result = this.getCursorAndFiles(filtered, page, pageSize);
+      cursor = result.cursor;
+      return result.files;
     };
 
     const readFile = (path: string, id: string | null | undefined) =>
