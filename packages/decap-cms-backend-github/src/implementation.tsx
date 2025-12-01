@@ -608,7 +608,13 @@ export default class GitHub implements Implementation {
     }
   }
 
-  async allEntriesByFolder(folder: string, extension: string, depth: number, pathRegex?: RegExp) {
+  async allEntriesByFolder(
+    folder: string,
+    extension: string,
+    depth: number,
+    pathRegex?: RegExp,
+    onProgress?: (progress: { loadedCount: number; totalCount: number; entries: ImplementationEntry[] }) => void,
+  ) {
     const repoURL = this.api!.originRepoURL;
 
     const listFiles = async () => {
@@ -706,13 +712,22 @@ export default class GitHub implements Implementation {
 
         allEntries.push(...filteredEntries);
 
-        // Log progress for debugging
+        // Log progress and call callback for progressive loading
         if (i + LOAD_BATCH_SIZE < files.length) {
           console.log(
             `[GitHub Backend] Loaded ${allEntries.length}/${files.length} entries (${Math.round(
               (allEntries.length / files.length) * 100,
             )}%)`,
           );
+        }
+        
+        // Call progress callback with current state
+        if (onProgress) {
+          onProgress({
+            loadedCount: allEntries.length,
+            totalCount: files.length,
+            entries: [...allEntries], // Copy array to avoid mutation issues
+          });
         }
       }
 

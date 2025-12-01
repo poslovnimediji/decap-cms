@@ -663,7 +663,10 @@ export class Backend {
   // repeats the process. Once there is no available "next" action, it
   // returns all the collected entries. Used to retrieve all entries
   // for local searches and queries.
-  async listAllEntries(collection: Collection) {
+  async listAllEntries(
+    collection: Collection,
+    onProgress?: (progress: { loadedCount: number; totalCount: number; entries: EntryValue[] }) => void,
+  ) {
     if (collection.get('folder') && this.implementation.allEntriesByFolder) {
       const depth = collectionDepth(collection);
       const extension = selectFolderEntryExtension(collection);
@@ -674,8 +677,21 @@ export class Backend {
           collection,
         )}`,
       );
+      
+      // Wrap onProgress to process entries before calling callback
+      const wrappedOnProgress = onProgress
+        ? (progress: { loadedCount: number; totalCount: number; entries: any[] }) => {
+            const processedEntries = this.processEntries(progress.entries, collection);
+            onProgress({
+              loadedCount: progress.loadedCount,
+              totalCount: progress.totalCount,
+              entries: processedEntries,
+            });
+          }
+        : undefined;
+      
       return this.implementation
-        .allEntriesByFolder(folder, extension, depth, collectionRegex(collection))
+        .allEntriesByFolder(folder, extension, depth, collectionRegex(collection), wrappedOnProgress)
         .then(entries => {
           console.log(
             `[backend.listAllEntries] allEntriesByFolder returned ${entries.length} entries`,

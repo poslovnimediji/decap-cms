@@ -234,13 +234,17 @@ export function loadEntriesPage(collection: Collection, page: number) {
   };
 }
 
-export async function getAllEntries(state: State, collection: Collection) {
+export async function getAllEntries(
+  state: State,
+  collection: Collection,
+  onProgress?: (progress: { loadedCount: number; totalCount: number; entries: EntryValue[] }) => void,
+) {
   const backend = currentBackend(state.config);
   const integration = selectIntegration(state, collection.get('name'), 'listEntries');
   const provider: Backend = integration
     ? getIntegrationProvider(state.integrations, backend.getToken, integration)
     : backend;
-  const entries = await provider.listAllEntries(collection);
+  const entries = await provider.listAllEntries(collection, onProgress);
   return entries;
 }
 
@@ -952,7 +956,15 @@ export function loadEntries(collection: Collection, page = 0) {
         // so that i18n grouping works correctly (entries in different locales get grouped).
         // Use getAllEntries which calls listAllEntries that processes all entries together.
         console.log(`[loadEntries] Loading all entries for i18n collection: ${collectionName}`);
-        const allEntries = await getAllEntries(state, collection);
+        const allEntries = await getAllEntries(state, collection, (progress) => {
+          // Dispatch progress update
+          dispatch(entriesProgress(collection, progress.loadedCount, progress.totalCount));
+          
+          // Show entries progressively as they load (only if not the final batch)
+          if (progress.loadedCount < progress.totalCount) {
+            dispatch(entriesLoaded(collection, progress.entries, 0, Cursor.create({}), false, false));
+          }
+        });
         console.log(
           `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
         );
@@ -976,7 +988,15 @@ export function loadEntries(collection: Collection, page = 0) {
         // For GraphQL collections, load ALL entries progressively in batches
         // GraphQL handles batching automatically via listFilesPaginated
         console.log(`[loadEntries] Loading all entries for GraphQL collection: ${collectionName}`);
-        const allEntries = await getAllEntries(state, collection);
+        const allEntries = await getAllEntries(state, collection, (progress) => {
+          // Dispatch progress update
+          dispatch(entriesProgress(collection, progress.loadedCount, progress.totalCount));
+          
+          // Show entries progressively as they load (only if not the final batch)
+          if (progress.loadedCount < progress.totalCount) {
+            dispatch(entriesLoaded(collection, progress.entries, 0, Cursor.create({}), false, false));
+          }
+        });
         console.log(
           `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
         );

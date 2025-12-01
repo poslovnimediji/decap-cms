@@ -201,6 +201,7 @@ export interface Implementation {
     extension: string,
     depth: number,
     pathRegex?: RegExp,
+    onProgress?: (progress: { loadedCount: number; totalCount: number; entries: ImplementationEntry[] }) => void,
   ) => Promise<ImplementationEntry[]>;
   traverseCursor?: (
     cursor: Cursor,
