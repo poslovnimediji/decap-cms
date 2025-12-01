@@ -932,6 +932,7 @@ export default class GitHub implements Implementation {
           targetPage = pageCount;
           break;
         case 'next':
+        case 'append_next':
           targetPage = currentPage + 1;
           break;
         case 'prev':
@@ -977,7 +978,8 @@ export default class GitHub implements Implementation {
           result = this.getCursorAndFiles(files, meta.get('pageCount'));
           break;
         }
-        case 'next': {
+        case 'next':
+        case 'append_next': {
           result = this.getCursorAndFiles(files, meta.get('page') + 1);
           break;
         }

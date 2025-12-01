@@ -1013,10 +1013,29 @@ export function traverseCollectionCursor(collection: Collection, action: string)
     }
     const backend = currentBackend(state.config);
 
-    const { action: realAction, append } = appendActions.has(action)
-      ? appendActions.get(action).toJS()
-      : { action, append: false };
     const cursor = selectCollectionEntriesCursor(state.cursors, collection.get('name'));
+
+    // Check if action is directly in appendActions (e.g., 'append_next')
+    // OR if we need to find the append action that maps to this action (e.g., 'next' → 'append_next')
+    let realAction = action;
+    let append = false;
+
+    if (appendActions.has(action)) {
+      // Direct match: action is 'append_next'
+      const mapping = appendActions.get(action).toJS();
+      realAction = mapping.action;
+      append = mapping.append;
+    } else {
+      // Reverse lookup: is there an append action that maps to this action?
+      // E.g., user says 'next', check if cursor has 'append_next' which maps to 'next'
+      const appendActionKey = appendActions.findKey(
+        (v: Map<string, string | boolean>) => v.get('action') === action,
+      );
+      if (appendActionKey && cursor.actions!.has(appendActionKey)) {
+        realAction = appendActionKey;
+        append = appendActions.getIn([appendActionKey, 'append']) as boolean;
+      }
+    }
 
     // Handle cursors representing pages in the old, integer-based
     // pagination API
