@@ -624,28 +624,36 @@ export default class GitHub implements Implementation {
         'listFilesRecursive' in this.api &&
         typeof this.api.listFilesRecursive === 'function'
       ) {
-        console.log(`[allEntriesByFolder] Using GraphQL listFilesRecursive`);
-        const files = await this.api.listFilesRecursive(folder, {
-          repoURL,
-          maxDepth: depth,
-          chunkSize: 50, // Process 50 directories at a time
-        });
-        return files.filter(
-          (file: ApiFile) =>
-            (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
-        );
-      } else {
-        // Fallback to original implementation
-        console.log(`[allEntriesByFolder] Using REST API listFiles with depth: ${depth}`);
-        const files = await this.api!.listFiles(folder, {
-          repoURL,
-          depth,
-        });
-        console.log(`[allEntriesByFolder] REST API returned ${files.length} files`);
-        return files.filter(
-          file => (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
-        );
+        try {
+          console.log(`[allEntriesByFolder] Trying GraphQL listFilesRecursive with chunkSize: 50`);
+          const files = await this.api.listFilesRecursive(folder, {
+            repoURL,
+            maxDepth: depth,
+            chunkSize: 50, // Process 50 directories at a time
+          });
+          console.log(`[allEntriesByFolder] GraphQL returned ${files.length} files`);
+          return files.filter(
+            (file: ApiFile) =>
+              (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
+          );
+        } catch (error) {
+          console.log(
+            `[allEntriesByFolder] GraphQL listFilesRecursive failed: ${error}, falling back to REST API`,
+          );
+          // Fall through to REST API below
+        }
       }
+
+      // Fallback to REST API (either GraphQL disabled, depth > 1, or GraphQL failed)
+      console.log(`[allEntriesByFolder] Using REST API listFiles with depth: ${depth}`);
+      const files = await this.api!.listFiles(folder, {
+        repoURL,
+        depth,
+      });
+      console.log(`[allEntriesByFolder] REST API returned ${files.length} files`);
+      return files.filter(
+        file => (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
+      );
     };
 
     const readFile = (path: string, id: string | null | undefined) => {
