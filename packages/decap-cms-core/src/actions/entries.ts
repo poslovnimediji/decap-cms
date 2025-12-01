@@ -886,7 +886,17 @@ export function loadEntries(collection: Collection, page = 0) {
     try {
       const isNestedCollection = collection.has('nested');
       const isI18nCollection = hasI18n(collection);
-      const loadAllEntries = isNestedCollection || isI18nCollection;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const backendConfig = state.config?.backend as any;
+      const useGraphQL = backendConfig?.use_graphql === true;
+      
+      // For GraphQL, nested collections, or i18n collections, load all entries
+      // GraphQL will handle batching automatically via listFilesPaginated with progressive loading
+      const loadAllEntries = isNestedCollection || isI18nCollection || useGraphQL;
+      
+      console.log(
+        `[loadEntries] ${collectionName}: isNested=${isNestedCollection}, isI18n=${isI18nCollection}, useGraphQL=${useGraphQL}, loadAllEntries=${loadAllEntries}`,
+      );
 
       // Try cache first for collections that load all entries
       let cachedEntries: EntryValue[] | null = null;
