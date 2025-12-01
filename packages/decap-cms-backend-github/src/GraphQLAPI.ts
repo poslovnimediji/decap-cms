@@ -656,6 +656,14 @@ export default class GraphQLAPI extends API {
     console.log(
       `[GraphQLAPI.listFilesRecursive] Complete: ${allFiles.length} files from ${dirsProcessed} directories, ${errorCount} errors`,
     );
+
+    // If we encountered errors and got 0 files, throw to trigger REST API fallback
+    if (errorCount > 0 && allFiles.length === 0) {
+      throw new Error(
+        `GraphQL failed to load any files from ${folder} (${errorCount} errors). Likely due to large directory size or API limits.`,
+      );
+    }
+
     return allFiles;
   }
 
