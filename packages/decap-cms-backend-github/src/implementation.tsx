@@ -517,7 +517,9 @@ export default class GitHub implements Implementation {
           });
 
           console.log(
-            `[entriesByFolder] Created cursor with actions: ${JSON.stringify(cursor.actions?.toArray())}`,
+            `[entriesByFolder] Created cursor with actions: ${JSON.stringify(
+              cursor.actions?.toArray(),
+            )}`,
           );
 
           return filtered;
@@ -540,11 +542,15 @@ export default class GitHub implements Implementation {
       });
       console.log(`[entriesByFolder] REST API returned ${files.length} files`);
       const filtered = files.filter(file => filterByExtension(file, extension));
-      console.log(`[entriesByFolder] Filtered to ${filtered.length} files with extension: ${extension}`);
+      console.log(
+        `[entriesByFolder] Filtered to ${filtered.length} files with extension: ${extension}`,
+      );
       const result = this.getCursorAndFiles(filtered, page, pageSize);
       cursor = result.cursor;
       console.log(
-        `[entriesByFolder] Created cursor with actions: ${JSON.stringify(cursor.actions?.toArray())}, returning ${result.files.length} files for page ${page}`,
+        `[entriesByFolder] Created cursor with actions: ${JSON.stringify(
+          cursor.actions?.toArray(),
+        )}, returning ${result.files.length} files for page ${page}`,
       );
       return result.files;
     };
@@ -613,7 +619,11 @@ export default class GitHub implements Implementation {
     extension: string,
     depth: number,
     pathRegex?: RegExp,
-    onProgress?: (progress: { loadedCount: number; totalCount: number; entries: ImplementationEntry[] }) => void,
+    onProgress?: (progress: {
+      loadedCount: number;
+      totalCount: number;
+      entries: ImplementationEntry[];
+    }) => void,
   ) {
     const repoURL = this.api!.originRepoURL;
 
@@ -720,7 +730,7 @@ export default class GitHub implements Implementation {
             )}%)`,
           );
         }
-        
+
         // Call progress callback with current state
         if (onProgress) {
           onProgress({

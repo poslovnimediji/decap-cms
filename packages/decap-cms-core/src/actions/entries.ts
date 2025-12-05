@@ -237,7 +237,11 @@ export function loadEntriesPage(collection: Collection, page: number) {
 export async function getAllEntries(
   state: State,
   collection: Collection,
-  onProgress?: (progress: { loadedCount: number; totalCount: number; entries: EntryValue[] }) => void,
+  onProgress?: (progress: {
+    loadedCount: number;
+    totalCount: number;
+    entries: EntryValue[];
+  }) => void,
 ) {
   const backend = currentBackend(state.config);
   const integration = selectIntegration(state, collection.get('name'), 'listEntries');
@@ -838,8 +842,10 @@ const appendActions = fromJS({
 
 function addAppendActionsToCursor(cursor: Cursor) {
   const originalActions = cursor.actions?.toArray() || [];
-  console.log(`[addAppendActionsToCursor] Original cursor actions: ${JSON.stringify(originalActions)}`);
-  
+  console.log(
+    `[addAppendActionsToCursor] Original cursor actions: ${JSON.stringify(originalActions)}`,
+  );
+
   const updatedCursor = Cursor.create(cursor).updateStore('actions', (actions: Set<string>) => {
     return actions.union(
       appendActions
@@ -847,10 +853,10 @@ function addAppendActionsToCursor(cursor: Cursor) {
         .keySeq(),
     );
   });
-  
+
   const newActions = updatedCursor.actions?.toArray() || [];
   console.log(`[addAppendActionsToCursor] Updated cursor actions: ${JSON.stringify(newActions)}`);
-  
+
   return updatedCursor;
 }
 
@@ -864,6 +870,8 @@ export function loadEntries(collection: Collection, page = 0) {
 
     // If user has already set a sort, use it
     const sortFields = selectEntriesSortFields(state.entries, collectionName);
+
+    // If user has already set a sort, use it
     if (sortFields && sortFields.length > 0) {
       const field = sortFields[0];
       return dispatch(sortByField(collection, field.get('key'), field.get('direction')));
@@ -893,11 +901,11 @@ export function loadEntries(collection: Collection, page = 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const backendConfig = state.config?.backend as any;
       const useGraphQL = backendConfig?.use_graphql === true;
-      
+
       // For GraphQL, nested collections, or i18n collections, load all entries
       // GraphQL will handle batching automatically via listFilesPaginated with progressive loading
       const loadAllEntries = isNestedCollection || isI18nCollection || useGraphQL;
-      
+
       console.log(
         `[loadEntries] ${collectionName}: isNested=${isNestedCollection}, isI18n=${isI18nCollection}, useGraphQL=${useGraphQL}, loadAllEntries=${loadAllEntries}`,
       );
@@ -956,13 +964,15 @@ export function loadEntries(collection: Collection, page = 0) {
         // so that i18n grouping works correctly (entries in different locales get grouped).
         // Use getAllEntries which calls listAllEntries that processes all entries together.
         console.log(`[loadEntries] Loading all entries for i18n collection: ${collectionName}`);
-        const allEntries = await getAllEntries(state, collection, (progress) => {
+        const allEntries = await getAllEntries(state, collection, progress => {
           // Dispatch progress update
           dispatch(entriesProgress(collection, progress.loadedCount, progress.totalCount));
-          
+
           // Show entries progressively as they load (only if not the final batch)
           if (progress.loadedCount < progress.totalCount) {
-            dispatch(entriesLoaded(collection, progress.entries, 0, Cursor.create({}), false, false));
+            dispatch(
+              entriesLoaded(collection, progress.entries, 0, Cursor.create({}), false, false),
+            );
           }
         });
         console.log(
@@ -988,13 +998,15 @@ export function loadEntries(collection: Collection, page = 0) {
         // For GraphQL collections, load ALL entries progressively in batches
         // GraphQL handles batching automatically via listFilesPaginated
         console.log(`[loadEntries] Loading all entries for GraphQL collection: ${collectionName}`);
-        const allEntries = await getAllEntries(state, collection, (progress) => {
+        const allEntries = await getAllEntries(state, collection, progress => {
           // Dispatch progress update
           dispatch(entriesProgress(collection, progress.loadedCount, progress.totalCount));
-          
+
           // Show entries progressively as they load (only if not the final batch)
           if (progress.loadedCount < progress.totalCount) {
-            dispatch(entriesLoaded(collection, progress.entries, 0, Cursor.create({}), false, false));
+            dispatch(
+              entriesLoaded(collection, progress.entries, 0, Cursor.create({}), false, false),
+            );
           }
         });
         console.log(
@@ -1097,11 +1109,15 @@ export function traverseCollectionCursor(collection: Collection, action: string)
     try {
       dispatch(entriesLoading(collection));
       console.log(
-        `[traverseCollectionCursor] Calling traverseCursor with action: ${action}, realAction: ${realAction}, cursor actions: ${JSON.stringify(cursor.actions?.toArray())}`,
+        `[traverseCollectionCursor] Calling traverseCursor with action: ${action}, realAction: ${realAction}, cursor actions: ${JSON.stringify(
+          cursor.actions?.toArray(),
+        )}`,
       );
       const { entries, cursor: newCursor } = await traverseCursor(backend, cursor, realAction);
       console.log(
-        `[traverseCollectionCursor] traverseCursor succeeded, got ${entries.length} entries, new cursor actions: ${JSON.stringify(newCursor.actions?.toArray())}`,
+        `[traverseCollectionCursor] traverseCursor succeeded, got ${
+          entries.length
+        } entries, new cursor actions: ${JSON.stringify(newCursor.actions?.toArray())}`,
       );
 
       const pagination = newCursor.meta?.get('page');

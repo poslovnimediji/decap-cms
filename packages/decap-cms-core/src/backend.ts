@@ -665,7 +665,11 @@ export class Backend {
   // for local searches and queries.
   async listAllEntries(
     collection: Collection,
-    onProgress?: (progress: { loadedCount: number; totalCount: number; entries: EntryValue[] }) => void,
+    onProgress?: (progress: {
+      loadedCount: number;
+      totalCount: number;
+      entries: EntryValue[];
+    }) => void,
   ) {
     if (collection.get('folder') && this.implementation.allEntriesByFolder) {
       const depth = collectionDepth(collection);
@@ -677,7 +681,7 @@ export class Backend {
           collection,
         )}`,
       );
-      
+
       // Wrap onProgress to process entries before calling callback
       const wrappedOnProgress = onProgress
         ? (progress: { loadedCount: number; totalCount: number; entries: any[] }) => {
@@ -689,9 +693,15 @@ export class Backend {
             });
           }
         : undefined;
-      
+
       return this.implementation
-        .allEntriesByFolder(folder, extension, depth, collectionRegex(collection), wrappedOnProgress)
+        .allEntriesByFolder(
+          folder,
+          extension,
+          depth,
+          collectionRegex(collection),
+          wrappedOnProgress,
+        )
         .then(entries => {
           console.log(
             `[backend.listAllEntries] allEntriesByFolder returned ${entries.length} entries`,
