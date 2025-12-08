@@ -22,6 +22,7 @@ import {
   ENTRIES_FAILURE,
   ENTRIES_PROGRESS,
   ENTRY_DELETE_SUCCESS,
+  ENTRY_PERSIST_SUCCESS,
   SORT_ENTRIES_REQUEST,
   SORT_ENTRIES_SUCCESS,
   SORT_ENTRIES_FAILURE,
@@ -224,6 +225,17 @@ function entries(
           map.setIn(['pages', collection, 'ids'], ids.unshift(slug));
         }
       });
+    }
+
+    case ENTRY_PERSIST_SUCCESS: {
+      const payload = action.payload as any;
+      if (payload.entry) {
+        return state.setIn(
+          ['entities', `${payload.collectionName}.${payload.slug || payload.entrySlug}`],
+          fromJS(payload.entry),
+        );
+      }
+      return state;
     }
 
     case ENTRIES_REQUEST: {

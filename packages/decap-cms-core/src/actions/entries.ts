@@ -598,6 +598,10 @@ export function entryPersisted(collection: Collection, entry: EntryMap, slug: st
        * Pass slug from backend for newly created entries.
        */
       slug,
+      /**
+       * Pass the persisted entry so we can update the cache.
+       */
+      entry,
     },
   };
 }
@@ -1385,7 +1389,12 @@ export function persistEntry(collection: Collection) {
         if (assetProxies.length > 0) {
           await dispatch(loadMedia());
         }
-        dispatch(entryPersisted(collection, serializedEntry, newSlug));
+        
+        // Create entry with updated slug for cache update
+        const persistedEntry = newSlug !== serializedEntry.get('slug')
+          ? serializedEntry.set('slug', newSlug)
+          : serializedEntry;
+        dispatch(entryPersisted(collection, persistedEntry, newSlug));
         if (collection.has('nested')) {
           await dispatch(loadEntries(collection));
         }
