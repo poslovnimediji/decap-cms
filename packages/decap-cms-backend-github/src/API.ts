@@ -902,18 +902,66 @@ export default class API {
     }));
   }
 
+  /**
+   * Helper method to detect if an error is a non-fast-forward error
+   */
+  private isNonFastForwardError(error: Error): boolean {
+    const message = error.message || '';
+    return (
+      message.includes('non-fast-forward') ||
+      message.includes('Reference update failed') ||
+      (message.includes('failing to update') && message.includes('force'))
+    );
+  }
+
+  /**
+   * Execute a function with retry logic for non-fast-forward errors.
+   * This handles race conditions where the branch has moved between operations.
+   */
+  private async withRetryOnNonFastForward<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries = 3,
+  ): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+
+        if (this.isNonFastForwardError(lastError) && attempt < maxRetries) {
+          console.log(
+            `[GitHub API] Non-fast-forward error in ${operationName}, ` +
+              `retrying (attempt ${attempt + 1}/${maxRetries})...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw lastError || new Error(`${operationName} failed after ${maxRetries} attempts`);
+  }
+
   async persistFiles(dataFiles: DataFile[], mediaFiles: AssetProxy[], options: PersistOptions) {
     const files = mediaFiles.concat(dataFiles);
     const uploadPromises = files.map(file => this.uploadBlob(file));
     await Promise.all(uploadPromises);
 
     if (!options.useWorkflow) {
-      return this.getDefaultBranch()
-        .then(branchData =>
-          this.updateTree(branchData.commit.sha, files as { sha: string; path: string }[]),
-        )
-        .then(changeTree => this.commit(options.commitMessage, changeTree))
-        .then(response => this.patchBranch(this.branch, response.sha));
+      return this.withRetryOnNonFastForward(async () => {
+        const branchData = await this.getDefaultBranch();
+        const changeTree = await this.updateTree(
+          branchData.commit.sha,
+          files as { sha: string; path: string }[],
+        );
+        const commitResponse = await this.commit(options.commitMessage, changeTree);
+        return this.patchBranch(this.branch, commitResponse.sha);
+      }, 'persistFiles (direct publish)');
     } else {
       const mediaFilesList = (mediaFiles as { sha: string; path: string }[]).map(
         ({ sha, path }) => ({
@@ -994,20 +1042,22 @@ export default class API {
     const branch = branchFromContentKey(contentKey);
     const unpublished = options.unpublished || false;
     if (!unpublished) {
-      const branchData = await this.getDefaultBranch();
-      const changeTree = await this.updateTree(branchData.commit.sha, files);
-      const commitResponse = await this.commit(options.commitMessage, changeTree);
+      await this.withRetryOnNonFastForward(async () => {
+        const branchData = await this.getDefaultBranch();
+        const changeTree = await this.updateTree(branchData.commit.sha, files);
+        const commitResponse = await this.commit(options.commitMessage, changeTree);
 
-      if (this.useOpenAuthoring) {
-        await this.createBranch(branch, commitResponse.sha);
-      } else {
-        const pr = await this.createBranchAndPullRequest(
-          branch,
-          commitResponse.sha,
-          options.commitMessage,
-        );
-        await this.setPullRequestStatus(pr, options.status || this.initialWorkflowStatus);
-      }
+        if (this.useOpenAuthoring) {
+          await this.createBranch(branch, commitResponse.sha);
+        } else {
+          const pr = await this.createBranchAndPullRequest(
+            branch,
+            commitResponse.sha,
+            options.commitMessage,
+          );
+          await this.setPullRequestStatus(pr, options.status || this.initialWorkflowStatus);
+        }
+      }, 'editorialWorkflowGit (new entry)');
     } else {
       // Entry is already on editorial review workflow - commit to existing branch
       const { files: diffFiles } = await this.getDifferences(

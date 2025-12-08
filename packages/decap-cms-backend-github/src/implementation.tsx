@@ -928,7 +928,22 @@ export default class GitHub implements Implementation {
     // persistEntry is a transactional operation
     return runWithLock(
       this.lock,
-      () => this.api!.persistFiles(entry.dataFiles, entry.assets, options),
+      async () => {
+        try {
+          return await this.api!.persistFiles(entry.dataFiles, entry.assets, options);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (
+            errorMessage.includes('non-fast-forward') ||
+            errorMessage.includes('Reference update failed')
+          ) {
+            throw new Error(
+              'Unable to save: the content has been modified by another user or process. The system automatically retried but the conflict persists.',
+            );
+          }
+          throw error;
+        }
+      },
       'Failed to acquire persist entry lock',
     );
   }
