@@ -54,6 +54,7 @@ interface TreeFile {
   size: number;
   type: string;
   name: string;
+  sha?: string;
 }
 
 type GraphQLPullRequest = {
@@ -429,6 +430,7 @@ export default class GraphQLAPI extends API {
             name: item.name,
             type: item.type,
             id: item.sha,
+            sha: item.sha,
             path: `${path}/${item.name}`,
             size: item.blob ? item.blob.size : 0,
           },
@@ -437,6 +439,7 @@ export default class GraphQLAPI extends API {
 
       return acc;
     }, [] as TreeFile[]);
+    console.log(`[GraphQLAPI.getAllFiles] Extracted ${allFiles.length} files from tree, all with SHA`);
     return allFiles;
   }
 
@@ -628,6 +631,7 @@ export default class GraphQLAPI extends API {
                     name: entry.name,
                     type: entry.type,
                     id: entry.sha,
+                    sha: entry.sha,
                     path: fullPath,
                     size: entry.blob?.size || 0,
                   });
@@ -991,12 +995,55 @@ export default class GraphQLAPI extends API {
     const { branch = this.branch, repoURL = this.repoURL } = options;
     const { owner, name } = this.getOwnerAndNameFromRepoUrl(repoURL);
 
+    console.log(`[GraphQLAPI.batchReadFileMetadata] Starting batch metadata fetch for ${files.length} files`);
+    console.log(`[GraphQLAPI.batchReadFileMetadata] Files with SHA: ${files.filter(f => f.sha).length}, without SHA: ${files.filter(f => !f.sha).length}`);
+
+    function getKey(sha?: string | null) {
+      return sha ? `gh.${sha}.meta` : null;
+    }
+    const cachedResults: Array<{ author: string; updatedOn: string } | undefined> =
+      new Array(files.length);
+
+    // First, try to read from cache by SHA
+    console.log(`[GraphQLAPI.batchReadFileMetadata] Checking cache for ${files.length} files...`);
+    await Promise.all(
+      files.map(async (file, index) => {
+        const cacheKey = getKey(file.sha || null);
+        if (!cacheKey) return;
+        try {
+          const cached = await localForage.getItem<{ author: string; updatedOn: string }>(
+            cacheKey,
+          );
+          if (cached) {
+            cachedResults[index] = cached;
+            console.log(`[GraphQLAPI.batchReadFileMetadata] Cache HIT for ${file.path} (SHA: ${file.sha?.slice(0, 7)})`);
+          }
+        } catch (error) {
+          console.warn(`[GraphQLAPI.batchReadFileMetadata] Cache read error for ${file.path}:`, error);
+        }
+      }),
+    );
+
+    const cacheHits = cachedResults.filter(r => r !== undefined).length;
+    const cacheMisses = files.length - cacheHits;
+    console.log(`[GraphQLAPI.batchReadFileMetadata] Cache results: ${cacheHits} hits, ${cacheMisses} misses`);
+
     // GitHub GraphQL has query complexity limits, so batch in chunks
     const BATCH_SIZE = 20;
     const results: Array<{ author: string; updatedOn: string }> = [];
 
     for (let i = 0; i < files.length; i += BATCH_SIZE) {
-      const batch = files.slice(i, i + BATCH_SIZE);
+      const batch = files
+        .map((file, idx) => ({ file, idx }))
+        .slice(i, i + BATCH_SIZE)
+        .filter(({ idx }) => !cachedResults[idx]);
+
+      if (batch.length === 0) {
+        console.log(`[GraphQLAPI.batchReadFileMetadata] Batch ${Math.floor(i / BATCH_SIZE) + 1}: All cached, skipping GraphQL query`);
+        continue;
+      }
+
+      console.log(`[GraphQLAPI.batchReadFileMetadata] Batch ${Math.floor(i / BATCH_SIZE) + 1}: Querying ${batch.length} uncached files via GraphQL`);
 
       // Build variables for the batch query
       const variables: Record<string, string> = {
@@ -1004,37 +1051,55 @@ export default class GraphQLAPI extends API {
         name,
         branch,
       };
-      batch.forEach((file, index) => {
+      batch.forEach(({ file }, index) => {
         variables[`expression${index}`] = `${branch}:${file.path}`;
       });
 
       try {
         const { data } = await this.query({
-          query: queries.fileCommits(batch.map(f => f.path)),
+          query: queries.fileCommits(batch.map(({ file }) => file.path)),
           variables,
           fetchPolicy: CACHE_FIRST, // Commit history is immutable
         });
 
         // Extract metadata from each file's commit history
-        batch.forEach((_file, index) => {
+        batch.forEach(({ idx }, index) => {
           const commitData = data.repository[`commits${index}`];
+          let metadata: { author: string; updatedOn: string } = { author: '', updatedOn: '' };
+
           if (commitData?.target?.history?.nodes?.[0]) {
             const commit = commitData.target.history.nodes[0];
-            results.push({
+            metadata = {
               author: commit.author.name || commit.author.email || '',
               updatedOn: commit.authoredDate || commit.author.date || '',
+            };
+          }
+
+          cachedResults[idx] = metadata;
+
+          const cacheKey = getKey(files[idx].sha || null);
+          if (cacheKey) {
+            localForage.setItem(cacheKey, metadata).catch(error => {
+              console.warn('[GraphQLAPI] Failed writing metadata cache:', error);
             });
-          } else {
-            // Fallback if no commit found
-            results.push({ author: '', updatedOn: '' });
           }
         });
       } catch (error) {
         // If batch query fails, provide empty metadata for the batch
         console.warn(`Failed to fetch metadata batch for ${batch.length} files:`, error);
-        batch.forEach(() => results.push({ author: '', updatedOn: '' }));
+        batch.forEach(({ idx }) => {
+          cachedResults[idx] = { author: '', updatedOn: '' };
+        });
       }
     }
+
+    // Merge cached + fetched in original order
+    files.forEach((_file, index) => {
+      results.push(cachedResults[index] ?? { author: '', updatedOn: '' });
+    });
+
+    const totalFetched = results.filter(r => r.author || r.updatedOn).length;
+    console.log(`[GraphQLAPI.batchReadFileMetadata] Complete: ${totalFetched}/${files.length} files have metadata (${cacheHits} from cache, ${totalFetched - cacheHits} from GraphQL)`);
 
     return results;
   }

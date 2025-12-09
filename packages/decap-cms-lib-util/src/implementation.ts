@@ -224,6 +224,7 @@ const MAX_CONCURRENT_DOWNLOADS = 10;
 export type ImplementationFile = {
   id?: string | null | undefined;
   label?: string;
+  sha?: string | null | undefined;
   path: string;
 };
 
@@ -407,7 +408,7 @@ const LOCAL_KEY = 'git.local';
 
 type LocalTree = {
   head: string;
-  files: { id: string; name: string; path: string }[];
+  files: { id: string; name: string; path: string; sha?: string }[];
 };
 
 type GetKeyArgs = {
@@ -570,34 +571,52 @@ export async function allEntriesByFolder({
   customFetch,
 }: AllEntriesByFolderArgs) {
   async function listAllFilesAndPersist() {
+    console.log(`[allEntriesByFolder] Listing all files from API for folder: ${folder}`);
     const files = await listAllFiles(folder, extension, depth);
     const branch = await getDefaultBranch();
+    
+    const filesWithSha = files.filter(f => f.sha).length;
+    console.log(`[allEntriesByFolder] Retrieved ${files.length} files, ${filesWithSha} have SHA`);
+    
+    const localTree = {
+      head: branch.sha,
+      files: files.map(f => ({
+        id: f.id!,
+        path: f.path,
+        name: basename(f.path),
+        sha: f.sha ?? f.id ?? undefined,
+      })),
+    };
+    
     await persistLocalTree({
       localForage,
-      localTree: {
-        head: branch.sha,
-        files: files.map(f => ({ id: f.id!, path: f.path, name: basename(f.path) })),
-      },
+      localTree,
       branch: branch.name,
       depth,
       extension,
       folder,
     });
+    
+    console.log(`[allEntriesByFolder] Persisted local tree with ${localTree.files.length} files at head ${branch.sha.slice(0, 7)}`);
     return files;
   }
 
   async function listFiles() {
     const localTree = await getLocalTree({ localForage, branch, folder, extension, depth });
     if (localTree) {
+      console.log(`[allEntriesByFolder] Found local tree cache with ${localTree.files.length} files at head ${localTree.head.slice(0, 7)}`);
       const branch = await getDefaultBranch();
+      console.log(`[allEntriesByFolder] Current branch head: ${branch.sha.slice(0, 7)}`);
+      
       // if the branch was forced pushed the local tree sha can be removed from the remote tree
       const localTreeInBranch = await isShaExistsInBranch(branch.name, localTree.head);
       if (!localTreeInBranch) {
         console.log(
-          `Can't find local tree head '${localTree.head}' in branch '${branch.name}', rebuilding local tree`,
+          `[allEntriesByFolder] Can't find local tree head '${localTree.head.slice(0, 7)}' in branch '${branch.name}', rebuilding local tree`,
         );
         return listAllFilesAndPersist();
       }
+      console.log(`[allEntriesByFolder] Computing diff between ${localTree.head.slice(0, 7)} and ${branch.sha.slice(0, 7)}...`);
       const diff = await getDiffFromLocalTree({
         branch,
         localTree,
@@ -608,32 +627,41 @@ export async function allEntriesByFolder({
         getFileId,
         filterFile,
       }).catch(e => {
-        console.log('Failed getting diff from local tree:', e);
+        console.log('[allEntriesByFolder] Failed getting diff from local tree:', e);
         return null;
       });
 
       if (!diff) {
-        console.log(`Diff is null, rebuilding local tree`);
+        console.log(`[allEntriesByFolder] Diff is null, rebuilding local tree`);
         return listAllFilesAndPersist();
       }
 
       if (diff.length === 0) {
+        console.log(`[allEntriesByFolder] No changes detected, using cached ${localTree.files.length} files`);
         // return local copy
         return localTree.files;
       } else {
+        console.log(`[allEntriesByFolder] Found ${diff.length} changed files in diff`);
         const deleted = diff.reduce((acc, d) => {
           acc[d.path] = d.deleted;
           return acc;
         }, {} as Record<string, boolean>);
+        
+        const deletedCount = Object.values(deleted).filter(Boolean).length;
+        const addedOrModified = diff.filter(d => !deleted[d.path]);
+        console.log(`[allEntriesByFolder] Diff summary: ${addedOrModified.length} added/modified, ${deletedCount} deleted`);
+        
         const newCopy = sortBy(
           unionBy(
-            diff.filter(d => !deleted[d.path]),
+            addedOrModified.map(d => ({ id: d.id, path: d.path, name: d.name, sha: d.id })),
             localTree.files.filter(f => !deleted[f.path]),
             file => file.path,
           ),
           file => file.path,
         );
 
+        console.log(`[allEntriesByFolder] Merged result: ${newCopy.length} total files (${localTree.files.length - deletedCount} existing + ${addedOrModified.length} new)`);
+        
         await persistLocalTree({
           localForage,
           localTree: { head: branch.sha, files: newCopy },
@@ -643,16 +671,26 @@ export async function allEntriesByFolder({
           folder,
         });
 
+        console.log(`[allEntriesByFolder] Updated local tree cache to head ${branch.sha.slice(0, 7)}`);
         return newCopy;
       }
     } else {
+      console.log(`[allEntriesByFolder] No local tree cache found, fetching all files from API`);
       return listAllFilesAndPersist();
     }
   }
 
   const files = await listFiles();
+  console.log(`[allEntriesByFolder] Loading content and metadata for ${files.length} files...`);
+  
   if (customFetch) {
-    return await customFetch(files);
+    console.log(`[allEntriesByFolder] Using custom fetch function`);
+    const entries = await customFetch(files);
+    console.log(`[allEntriesByFolder] Custom fetch returned ${entries.length} entries`);
+    return entries;
   }
-  return await fetchFiles(files, readFile, readFileMetadata, apiName);
+  
+  const entries = await fetchFiles(files, readFile, readFileMetadata, apiName);
+  console.log(`[allEntriesByFolder] Fetch complete: ${entries.length} entries loaded`);
+  return entries;
 }
