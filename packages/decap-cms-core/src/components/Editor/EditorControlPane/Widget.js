@@ -17,6 +17,7 @@ function isEmpty(value) {
     value === undefined ||
     (Object.prototype.hasOwnProperty.call(value, 'length') && value.length === 0) ||
     (value.constructor === Object && Object.keys(value).length === 0) ||
+    (Map.isMap(value) && value.size === 0) ||
     (List.isList(value) && value.size === 0)
   );
 }
