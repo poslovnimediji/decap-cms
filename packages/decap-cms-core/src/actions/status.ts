@@ -4,10 +4,12 @@ import { addNotification, dismissNotification } from './notifications';
 import type { ThunkDispatch } from 'redux-thunk';
 import type { AnyAction } from 'redux';
 import type { State } from '../types/redux';
+import type { RateLimitInfo } from '../reducers/status';
 
 export const STATUS_REQUEST = 'STATUS_REQUEST';
 export const STATUS_SUCCESS = 'STATUS_SUCCESS';
 export const STATUS_FAILURE = 'STATUS_FAILURE';
+export const SET_RATE_LIMIT_INFO = 'SET_RATE_LIMIT_INFO';
 
 export function statusRequest() {
   return {
@@ -29,6 +31,13 @@ export function statusFailure(error: Error) {
   return {
     type: STATUS_FAILURE,
     payload: { error },
+  } as const;
+}
+
+export function setRateLimitInfo(rateLimitInfo: RateLimitInfo) {
+  return {
+    type: SET_RATE_LIMIT_INFO,
+    payload: { rateLimitInfo },
   } as const;
 }
 
@@ -95,5 +104,5 @@ export function checkBackendStatus() {
 }
 
 export type StatusAction = ReturnType<
-  typeof statusRequest | typeof statusSuccess | typeof statusFailure
+  typeof statusRequest | typeof statusSuccess | typeof statusFailure | typeof setRateLimitInfo
 >;

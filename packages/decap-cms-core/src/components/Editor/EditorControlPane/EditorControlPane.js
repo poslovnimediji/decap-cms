@@ -25,7 +25,7 @@ import {
 const ControlPaneContainer = styled.div`
   max-width: 800px;
   margin: 0 auto;
-  padding-bottom: 16px;
+  padding-bottom: 2rem;
   font-size: 16px;
 `;
 

@@ -113,6 +113,17 @@ export default class GraphQLAPI extends API {
         },
       };
     });
+
+    // Custom fetch that captures rate limit headers
+    // eslint-disable-next-line func-style
+    const fetchWithRateLimit = (uri: string, options: RequestInit) => {
+      return fetch(uri, options).then(response => {
+        // Extract rate limit info from response headers
+        this.extractRateLimitInfo(response.headers);
+        return response;
+      });
+    };
+
     // Always use direct GitHub API access for GraphQL
     // base_url is for OAuth endpoints only, not API requests
     // Ensure apiRoot is always the GitHub API endpoint
@@ -124,7 +135,7 @@ export default class GraphQLAPI extends API {
 
     const httpLink = createHttpLink({
       uri: graphqlEndpoint,
-      fetch, // Use global fetch
+      fetch: fetchWithRateLimit, // Use custom fetch to capture rate limit headers
     });
 
     // Implement intelligent cache with custom dataIdFromObject for better cache keys
