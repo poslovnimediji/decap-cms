@@ -21,6 +21,7 @@ import Workflow from '../Workflow/Workflow';
 import Editor from '../Editor/Editor';
 import NotFoundPage from './NotFoundPage';
 import Header from './Header';
+import StatusBar from './StatusBar';
 
 TopBarProgress.config({
   barColors: {
@@ -253,6 +254,7 @@ class App extends React.Component {
           </Switch>
           {useMediaLibrary ? <MediaLibrary /> : null}
         </AppMainContainer>
+        <StatusBar />
       </>
     );
   }

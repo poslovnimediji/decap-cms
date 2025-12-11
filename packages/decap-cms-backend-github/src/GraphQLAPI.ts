@@ -113,7 +113,21 @@ export default class GraphQLAPI extends API {
         },
       };
     });
-    const httpLink = createHttpLink({ uri: `${this.apiRoot}/graphql` });
+
+    // Custom fetch that captures rate limit headers
+    function fetchWithRateLimit(uri: string, options: RequestInit) {
+      return fetch(uri, options).then(response => {
+        // Extract rate limit info from response headers
+        this.extractRateLimitInfo(response.headers);
+        return response;
+      });
+    }
+
+    const httpLink = createHttpLink({
+      uri: `${this.apiRoot}/graphql`,
+      fetch: fetchWithRateLimit as any,
+    });
+
     return new ApolloClient({
       link: authLink.concat(httpLink),
       cache: new InMemoryCache({ fragmentMatcher }),

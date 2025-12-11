@@ -22,6 +22,11 @@ const en = {
       media: 'Media',
       quickAdd: 'Quick add',
     },
+    statusBar: {
+      backend: 'backend',
+      requestsUsed: 'requests used,',
+      resetAt: 'ratelimit reset at',
+    },
     app: {
       errorHeader: 'Error loading the CMS configuration',
       configErrors: 'Config Errors',

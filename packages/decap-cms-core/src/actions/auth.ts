@@ -52,11 +52,10 @@ export function logout() {
   } as const;
 }
 
-// Check if user data token is cached and is valid
 export function authenticateUser() {
   return (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
     const state = getState();
-    const backend = currentBackend(state.config);
+    const backend = currentBackend(state.config, dispatch);
     dispatch(authenticating());
     return Promise.resolve(backend.currentUser())
       .then(user => {
@@ -79,7 +78,7 @@ export function authenticateUser() {
 export function loginUser(credentials: Credentials) {
   return (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
     const state = getState();
-    const backend = currentBackend(state.config);
+    const backend = currentBackend(state.config, dispatch);
 
     dispatch(authenticating());
     return backend

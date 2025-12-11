@@ -21,6 +21,11 @@ const sl = {
       media: 'Media',
       quickAdd: 'Hitro dodajanje',
     },
+    statusBar: {
+      backend: 'zaledje',
+      requestsUsed: 'zahtevkov uporabljeno,',
+      resetAt: 'ponastavitev omejitve ob',
+    },
     app: {
       errorHeader: 'Napaka pri nalaganju CMS konfiguracije',
       configErrors: 'Konfiguracijske napake',
