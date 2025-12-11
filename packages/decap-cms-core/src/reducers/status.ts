@@ -1,8 +1,21 @@
 import { produce } from 'immer';
 
-import { STATUS_REQUEST, STATUS_SUCCESS, STATUS_FAILURE } from '../actions/status';
+import {
+  STATUS_REQUEST,
+  STATUS_SUCCESS,
+  STATUS_FAILURE,
+  SET_RATE_LIMIT_INFO,
+} from '../actions/status';
 
 import type { StatusAction } from '../actions/status';
+
+export type RateLimitInfo = {
+  used: number;
+  limit: number;
+  remaining: number;
+  reset: number;
+  resource: string;
+};
 
 export type Status = {
   isFetching: boolean;
@@ -11,6 +24,7 @@ export type Status = {
     api: { status: boolean; statusPage: string };
   };
   error: Error | undefined;
+  rateLimitInfo?: RateLimitInfo;
 };
 
 const defaultState: Status = {
@@ -34,6 +48,10 @@ const status = produce((state: Status, action: StatusAction) => {
     case STATUS_FAILURE:
       state.isFetching = false;
       state.error = action.payload.error;
+      break;
+    case SET_RATE_LIMIT_INFO:
+      state.rateLimitInfo = action.payload.rateLimitInfo;
+      break;
   }
 }, defaultState);
 
