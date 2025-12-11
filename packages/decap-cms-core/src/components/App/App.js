@@ -36,6 +36,7 @@ const AppMainContainer = styled.div`
   min-width: 800px;
   max-width: 1440px;
   margin: 0 auto;
+  padding-bottom: 3rem;
 `;
 
 const ErrorContainer = styled.div`

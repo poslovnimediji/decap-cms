@@ -8,10 +8,12 @@ declare global {
 }
 
 const StatusBarContainer = styled.footer`
+  position: fixed;
+  z-index: 200;
+  bottom: 0;
   width: 100%;
-  margin-top: 2rem;
-  padding: 12px 18px;
-  font-size: 12px;
+  padding: 8px 18px;
+  font-size: 11px;
   display: flex;
   gap: 1rem;
   box-shadow: 0 4px 12px 0 rgba(68, 74, 87, 0.15), 0 1px 3px 0 rgba(68, 74, 87, 0.25);
