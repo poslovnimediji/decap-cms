@@ -24,7 +24,7 @@ const sl = {
     statusBar: {
       backend: 'zaledje',
       requestsUsed: 'zahtevkov uporabljeno',
-      resetAt: 'ponastavitev omejitve ob',
+      resetAt: 'kvota bo ponastavljena ob',
     },
     app: {
       errorHeader: 'Napaka pri nalaganju CMS konfiguracije',

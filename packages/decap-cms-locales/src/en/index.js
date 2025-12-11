@@ -25,7 +25,7 @@ const en = {
     statusBar: {
       backend: 'backend',
       requestsUsed: 'requests used',
-      resetAt: 'ratelimit reset at',
+      resetAt: 'next ratelimit reset at',
     },
     app: {
       errorHeader: 'Error loading the CMS configuration',
