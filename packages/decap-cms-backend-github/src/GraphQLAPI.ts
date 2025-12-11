@@ -115,13 +115,14 @@ export default class GraphQLAPI extends API {
     });
 
     // Custom fetch that captures rate limit headers
-    function fetchWithRateLimit(uri: string, options: RequestInit) {
+    // eslint-disable-next-line func-style
+    const fetchWithRateLimit = (uri: string, options: RequestInit) => {
       return fetch(uri, options).then(response => {
         // Extract rate limit info from response headers
         this.extractRateLimitInfo(response.headers);
         return response;
       });
-    }
+    };
 
     const httpLink = createHttpLink({
       uri: `${this.apiRoot}/graphql`,

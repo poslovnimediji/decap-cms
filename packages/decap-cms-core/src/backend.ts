@@ -356,7 +356,10 @@ export class Backend {
   user?: User | null;
   backupSync: AsyncLock;
 
-  constructor(implementation: Implementation, { backendName, authStore, config, dispatch }: BackendOptions) {
+  constructor(
+    implementation: Implementation,
+    { backendName, authStore, config, dispatch }: BackendOptions,
+  ) {
     // We can't reliably run this on exit, so we do cleanup on load.
     this.deleteAnonymousBackup();
     this.config = config;

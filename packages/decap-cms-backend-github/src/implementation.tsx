@@ -336,7 +336,13 @@ export default class GitHub implements Implementation {
     }
 
     const onRateLimitInfo = this.options.dispatch
-      ? (info: { used: number; limit: number; remaining: number; reset: number; resource: string }) => {
+      ? (info: {
+          used: number;
+          limit: number;
+          remaining: number;
+          reset: number;
+          resource: string;
+        }) => {
           this.options.dispatch!({
             type: 'SET_RATE_LIMIT_INFO',
             payload: { rateLimitInfo: info },

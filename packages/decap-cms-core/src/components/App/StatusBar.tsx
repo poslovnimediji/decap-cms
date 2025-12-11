@@ -32,7 +32,7 @@ interface StatusBarProps {
   };
   appVersion?: string;
   backendName?: string;
-  t: (key: string) => string,
+  t: (key: string) => string;
 }
 
 function formatResetTime(resetTimestamp: number): string {
@@ -45,7 +45,7 @@ function formatPercentage(used: number, limit: number): string {
   return percentage.toString().replace('.', ',');
 }
 
-function StatusBar({ rateLimitInfo, backendName, t}: StatusBarProps) {
+function StatusBar({ rateLimitInfo, backendName, t }: StatusBarProps) {
   return (
     <StatusBarContainer>
       {typeof DECAP_CMS_APP_VERSION === 'string' && (
@@ -53,12 +53,17 @@ function StatusBar({ rateLimitInfo, backendName, t}: StatusBarProps) {
       )}
 
       {backendName && (
-        <span>{backendName} {t('app.statusBar.backend')}</span>
+        <span>
+          {backendName} {t('app.statusBar.backend')}
+        </span>
       )}
 
       {rateLimitInfo && (
         <span>
-          {rateLimitInfo.used} / {rateLimitInfo.limit} ({formatPercentage(rateLimitInfo.used, rateLimitInfo.limit)}%) {t('app.statusBar.requestsUsed')}, {t('app.statusBar.resetAt')} {formatResetTime(rateLimitInfo.reset)}
+          {rateLimitInfo.used} / {rateLimitInfo.limit} (
+          {formatPercentage(rateLimitInfo.used, rateLimitInfo.limit)}%){' '}
+          {t('app.statusBar.requestsUsed')}, {t('app.statusBar.resetAt')}{' '}
+          {formatResetTime(rateLimitInfo.reset)}
         </span>
       )}
     </StatusBarContainer>

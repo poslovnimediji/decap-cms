@@ -65,7 +65,13 @@ export interface Config {
   cmsLabelPrefix: string;
   baseUrl?: string;
   getUser: ({ token }: { token: string }) => Promise<GitHubUser>;
-  onRateLimitInfo?: (info: { used: number; limit: number; remaining: number; reset: number; resource: string }) => void;
+  onRateLimitInfo?: (info: {
+    used: number;
+    limit: number;
+    remaining: number;
+    reset: number;
+    resource: string;
+  }) => void;
 }
 
 interface TreeFile {
@@ -198,7 +204,13 @@ export default class API {
   cmsLabelPrefix: string;
   baseUrl?: string;
   getUser: ({ token }: { token: string }) => Promise<GitHubUser>;
-  onRateLimitInfo?: (info: { used: number; limit: number; remaining: number; reset: number; resource: string }) => void;
+  onRateLimitInfo?: (info: {
+    used: number;
+    limit: number;
+    remaining: number;
+    reset: number;
+    resource: string;
+  }) => void;
   _userPromise?: Promise<GitHubUser>;
   _metadataSemaphore?: Semaphore;
 
