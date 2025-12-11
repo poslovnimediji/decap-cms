@@ -23,7 +23,7 @@ const sl = {
     },
     statusBar: {
       backend: 'zaledje',
-      requestsUsed: 'zahtevkov uporabljeno,',
+      requestsUsed: 'zahtevkov uporabljeno',
       resetAt: 'ponastavitev omejitve ob',
     },
     app: {

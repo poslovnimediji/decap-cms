@@ -24,7 +24,7 @@ const en = {
     },
     statusBar: {
       backend: 'backend',
-      requestsUsed: 'requests used,',
+      requestsUsed: 'requests used',
       resetAt: 'ratelimit reset at',
     },
     app: {

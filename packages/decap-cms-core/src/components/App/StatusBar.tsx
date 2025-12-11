@@ -3,13 +3,19 @@ import styled from '@emotion/styled';
 import { translate } from 'react-polyglot';
 import { connect } from 'react-redux';
 
+declare global {
+  let DECAP_CMS_APP_VERSION: string | undefined;
+}
+
 const StatusBarContainer = styled.footer`
   width: 100%;
-  border-top: 1px solid darkgray;
-  padding: 12px 24px;
+  margin-top: 2rem;
+  padding: 12px 18px;
   font-size: 12px;
   display: flex;
-  gap: 16px;
+  gap: 1rem;
+  box-shadow: 0 4px 12px 0 rgba(68, 74, 87, 0.15), 0 1px 3px 0 rgba(68, 74, 87, 0.25);
+  background-color: #f7f8fa;
 `;
 
 import type { State } from '../../types/redux';
@@ -37,11 +43,11 @@ function formatPercentage(used: number, limit: number): string {
   return percentage.toString().replace('.', ',');
 }
 
-function StatusBar({ rateLimitInfo, appVersion, backendName, t}: StatusBarProps) {
+function StatusBar({ rateLimitInfo, backendName, t}: StatusBarProps) {
   return (
     <StatusBarContainer>
-      {appVersion && (
-        <span>Decap CMS {appVersion}</span>
+      {typeof DECAP_CMS_APP_VERSION === 'string' && (
+        <span>decap-cms-app {DECAP_CMS_APP_VERSION}</span>
       )}
 
       {backendName && (
