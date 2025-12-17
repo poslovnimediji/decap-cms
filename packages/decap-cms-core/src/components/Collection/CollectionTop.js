@@ -47,16 +47,23 @@ function getCollectionProps(collection) {
   };
 }
 
-function CollectionTop({ collection, newEntryUrl, t }) {
+function CollectionTop({ collection, newEntryUrl, onSyncClick, t }) {
   const { collectionLabel, collectionLabelSingular, collectionDescription } = getCollectionProps(
     collection,
     t,
   );
 
+  function handleSync() {
+    if (onSyncClick) {
+      onSyncClick();
+    }
+  }
+
   return (
     <CollectionTopContainer>
       <CollectionTopRow>
         <CollectionTopHeading>{collectionLabel}</CollectionTopHeading>
+        <button onClick={handleSync}>Sync</button>
         {newEntryUrl ? (
           <CollectionTopNewButton to={newEntryUrl}>
             {t('collection.collectionTop.newButton', {
@@ -75,6 +82,7 @@ function CollectionTop({ collection, newEntryUrl, t }) {
 CollectionTop.propTypes = {
   collection: ImmutablePropTypes.map.isRequired,
   newEntryUrl: PropTypes.string,
+  onSyncClick: PropTypes.func,
   t: PropTypes.func.isRequired,
 };
 

@@ -12,7 +12,13 @@ import CollectionTop from './CollectionTop';
 import EntriesCollection from './Entries/EntriesCollection';
 import EntriesSearch from './Entries/EntriesSearch';
 import CollectionControls from './CollectionControls';
-import { sortByField, filterByField, changeViewStyle, groupByField } from '../../actions/entries';
+import {
+  sortByField,
+  filterByField,
+  changeViewStyle,
+  groupByField,
+  syncEntries,
+} from '../../actions/entries';
 import {
   selectSortableFields,
   selectViewFilters,
@@ -99,6 +105,7 @@ export class Collection extends React.Component {
       group,
       onChangeViewStyle,
       viewStyle,
+      onSyncClick,
     } = this.props;
 
     let newEntryUrl = collection.get('create') ? getNewEntryUrl(collectionName) : '';
@@ -130,7 +137,11 @@ export class Collection extends React.Component {
             </SearchResultContainer>
           ) : (
             <>
-              <CollectionTop collection={collection} newEntryUrl={newEntryUrl} />
+              <CollectionTop
+                collection={collection}
+                newEntryUrl={newEntryUrl}
+                onSyncClick={onSyncClick}
+              />
               <CollectionControls
                 viewStyle={viewStyle}
                 onChangeViewStyle={onChangeViewStyle}
@@ -191,6 +202,7 @@ const mapDispatchToProps = {
   filterByField,
   changeViewStyle,
   groupByField,
+  syncEntries,
 };
 
 function mergeProps(stateProps, dispatchProps, ownProps) {
@@ -202,6 +214,7 @@ function mergeProps(stateProps, dispatchProps, ownProps) {
     onFilterClick: filter => dispatchProps.filterByField(stateProps.collection, filter),
     onGroupClick: group => dispatchProps.groupByField(stateProps.collection, group),
     onChangeViewStyle: viewStyle => dispatchProps.changeViewStyle(viewStyle),
+    onSyncClick: () => dispatchProps.syncEntries(stateProps.collection),
   };
 }
 

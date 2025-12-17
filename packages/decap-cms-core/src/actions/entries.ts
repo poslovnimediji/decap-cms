@@ -86,6 +86,8 @@ export const REMOVE_DRAFT_ENTRY_MEDIA_FILE = 'REMOVE_DRAFT_ENTRY_MEDIA_FILE';
 
 export const CHANGE_VIEW_STYLE = 'CHANGE_VIEW_STYLE';
 
+export const SYNC_ENTRIES = 'SYNC_ENTRIES';
+
 /*
  * Simple Action Creators (Internal)
  * We still need to export them for tests
@@ -572,12 +574,23 @@ function addAppendActionsToCursor(cursor: Cursor) {
   });
 }
 
-export function loadEntries(collection: Collection, page = 0) {
+export function loadEntries(collection: Collection, page = 0, sync = false) {
   return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
     if (collection.get('isFetching')) {
       return;
     }
     const state = getState();
+
+    // POC: If sync=true, load from database cache
+    if (sync) {
+      console.log(
+        '🔄 SYNC MODE: Loading entries from database cache for collection:',
+        collection.get('name'),
+      );
+      // TODO: Call getDataFilesByCollection and load entries from there
+      // For now, just continue with normaclearCollectionCachel loading but log that we're in sync mode
+    }
+
     const sortFields = selectEntriesSortFields(state.entries, collection.get('name'));
 
     // If user has already set a sort, use it
@@ -611,7 +624,7 @@ export function loadEntries(collection: Collection, page = 0) {
         entries: EntryValue[];
       } = await (loadAllEntries
         ? // nested collections require all entries to construct the tree
-          provider.listAllEntries(collection).then((entries: EntryValue[]) => ({ entries }))
+          provider.listAllEntries(collection, sync).then((entries: EntryValue[]) => ({ entries }))
         : provider.listEntries(collection, page));
       response = {
         ...response,
@@ -1052,4 +1065,11 @@ export function validateMetaField(
     }
   }
   return { error: false };
+}
+
+export function syncEntries(collection: Collection) {
+  return (dispatch: ThunkDispatch<State, {}, AnyAction>) => {
+    dispatch({ type: SYNC_ENTRIES, payload: { collection: collection.get('name') } });
+    return dispatch(loadEntries(collection, 0, true)); // Pass sync=true
+  };
 }

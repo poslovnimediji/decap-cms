@@ -56,6 +56,11 @@ import {
   getI18nInfo,
   I18N_STRUCTURE,
 } from './lib/i18n';
+import {
+  getDataFilesByCollection,
+  saveDataFilesByCollection,
+  saveDataFileToDbCache,
+} from './dbcache';
 
 import type { I18nInfo } from './lib/i18n';
 import type AssetProxy from './valueObjects/AssetProxy';
@@ -586,11 +591,19 @@ export class Backend {
   // repeats the process. Once there is no available "next" action, it
   // returns all the collected entries. Used to retrieve all entries
   // for local searches and queries.
-  async listAllEntries(collection: Collection) {
+  async listAllEntries(collection: Collection, sync = false) {
+    const cacheFiles = await getDataFilesByCollection(collection.get('name'));
+
+    if (cacheFiles.length > 0 && !sync) {
+      return cacheFiles;
+    }
+
+    // return cacheFiles;
+
     if (collection.get('folder') && this.implementation.allEntriesByFolder) {
       const depth = collectionDepth(collection);
       const extension = selectFolderEntryExtension(collection);
-      return this.implementation
+      const all = await this.implementation
         .allEntriesByFolder(
           collection.get('folder') as string,
           extension,
@@ -598,6 +611,18 @@ export class Backend {
           collectionRegex(collection),
         )
         .then(entries => this.processEntries(entries, collection));
+
+      console.log('list all entries by folder', await all);
+      // save all to cache (ouch)
+      await saveDataFilesByCollection(
+        collection.get('name'),
+        all.map(entry => ({
+          path: entry.path,
+          raw: entry.raw,
+          json: entry,
+        })),
+      );
+      return all;
     }
 
     const response = await this.listEntries(collection);
@@ -608,6 +633,9 @@ export class Backend {
       entries.push(...newEntries);
       cursor = newCursor;
     }
+
+    console.log('list all entries', entries);
+
     return entries;
   }
 
@@ -1142,6 +1170,7 @@ export class Backend {
         slug: customPath && !useWorkflow ? slugFromCustomPath(collection, customPath) : slug,
         raw: this.entryToRaw(collection, entryDraft.get('entry')),
         newPath: customPath === path ? undefined : customPath,
+        json: entryDraft.get('entry').toJS(),
       };
     }
 
@@ -1197,6 +1226,7 @@ export class Backend {
       },
       opts,
     );
+    await saveDataFileToDbCache(collectionName, dataFile);
 
     await this.invokePostSaveEvent(entryDraft.get('entry'));
 
