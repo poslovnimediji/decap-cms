@@ -243,13 +243,14 @@ export async function getAllEntries(
     totalCount: number;
     entries: EntryValue[];
   }) => void,
+  sync = false,
 ) {
   const backend = currentBackend(state.config);
   const integration = selectIntegration(state, collection.get('name'), 'listEntries');
   const provider: Backend = integration
     ? getIntegrationProvider(state.integrations, backend.getToken, integration)
     : backend;
-  const entries = await provider.listAllEntries(collection, onProgress);
+  const entries = await provider.listAllEntries(collection, onProgress, sync);
   return entries;
 }
 
@@ -955,7 +956,7 @@ export function loadEntries(collection: Collection, page = 0, sync = false) {
         // For nested collections, we MUST load ALL entries at once with proper depth handling
         // to build the navigation tree. Use getAllEntries which calls allEntriesByFolder.
         console.log(`[loadEntries] Loading all entries for nested collection: ${collectionName}`);
-        const allEntries = await getAllEntries(state, collection);
+        const allEntries = await getAllEntries(state, collection, sync);
         console.log(
           `[loadEntries] getAllEntries returned ${allEntries.length} entries for ${collectionName}`,
         );
@@ -1390,11 +1391,12 @@ export function persistEntry(collection: Collection) {
         if (assetProxies.length > 0) {
           await dispatch(loadMedia());
         }
-        
+
         // Create entry with updated slug for cache update
-        const persistedEntry = newSlug !== serializedEntry.get('slug')
-          ? serializedEntry.set('slug', newSlug)
-          : serializedEntry;
+        const persistedEntry =
+          newSlug !== serializedEntry.get('slug')
+            ? serializedEntry.set('slug', newSlug)
+            : serializedEntry;
         dispatch(entryPersisted(collection, persistedEntry, newSlug));
         if (collection.has('nested')) {
           await dispatch(loadEntries(collection));
