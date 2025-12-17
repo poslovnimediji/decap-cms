@@ -180,6 +180,7 @@ export function getI18nFiles(
         ...(newPath && {
           newPath: getFilePath(structure, extension, newPath, slug, locales[0]),
         }),
+        json: draft.toJS(),
       },
     ];
   }
@@ -197,6 +198,7 @@ export function getI18nFiles(
           newPath: getFilePath(structure, extension, newPath, slug, locale),
         }),
         isFolder,
+        json: draft.toJS(),
       };
     })
     .filter(dataFile => dataFile.raw);

@@ -109,6 +109,7 @@ export const CHANGE_VIEW_STYLE = 'CHANGE_VIEW_STYLE';
 export const SET_ENTRIES_PAGE_SIZE = 'SET_ENTRIES_PAGE_SIZE';
 export const LOAD_ENTRIES_PAGE = 'LOAD_ENTRIES_PAGE';
 export const SET_ENTRIES_PAGE = 'SET_ENTRIES_PAGE';
+export const SYNC_ENTRIES = 'SYNC_ENTRIES';
 
 /*
  * Simple Action Creators (Internal)
@@ -864,7 +865,7 @@ function addAppendActionsToCursor(cursor: Cursor) {
   return updatedCursor;
 }
 
-export function loadEntries(collection: Collection, page = 0) {
+export function loadEntries(collection: Collection, page = 0, sync = false) {
   return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
     if (collection.get('isFetching')) {
       return;
@@ -1510,4 +1511,11 @@ export function validateMetaField(
     }
   }
   return { error: false };
+}
+
+export function syncEntries(collection: Collection) {
+  return (dispatch: ThunkDispatch<State, {}, AnyAction>) => {
+    dispatch({ type: SYNC_ENTRIES, payload: { collection: collection.get('name') } });
+    return dispatch(loadEntries(collection, 0, true)); // Pass sync=true
+  };
 }

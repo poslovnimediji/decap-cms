@@ -62,6 +62,7 @@ export type DataFile = {
   raw: string;
   newPath?: string;
   isFolder?: boolean;
+  json?: unknown;
 };
 
 export type AssetProxy = {

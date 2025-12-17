@@ -66,7 +66,7 @@ function getCollectionProps(collection) {
 
 const history = createHashHistory();
 
-function CollectionTop({ collection, newEntryUrl, t }) {
+function CollectionTop({ collection, newEntryUrl, onSyncClick, t }) {
   const { collectionLabel, collectionLabelSingular, collectionDescription } = getCollectionProps(
     collection,
     t,
@@ -82,10 +82,17 @@ function CollectionTop({ collection, newEntryUrl, t }) {
 
   // TODO: find some nice names for the path types, translate and consolidate
 
+  function handleSync() {
+    if (onSyncClick) {
+      onSyncClick();
+    }
+  }
+
   return (
     <CollectionTopContainer>
       <CollectionTopRow>
         <CollectionTopHeading>{collectionLabel}</CollectionTopHeading>
+        <button onClick={handleSync}>Sync</button>
         {indexFileConfig && collection.get('nested') ? (
           <Dropdown
             renderButton={() => (
@@ -128,6 +135,7 @@ function CollectionTop({ collection, newEntryUrl, t }) {
 CollectionTop.propTypes = {
   collection: ImmutablePropTypes.map.isRequired,
   newEntryUrl: PropTypes.string,
+  onSyncClick: PropTypes.func,
   t: PropTypes.func.isRequired,
 };
 

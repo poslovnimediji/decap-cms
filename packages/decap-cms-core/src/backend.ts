@@ -59,6 +59,11 @@ import {
   getI18nInfo,
   I18N_STRUCTURE,
 } from './lib/i18n';
+import {
+  getDataFilesByCollection,
+  saveDataFilesByCollection,
+  saveDataFileToDbCache,
+} from './dbcache';
 
 import type { I18nInfo } from './lib/i18n';
 import type AssetProxy from './valueObjects/AssetProxy';
@@ -676,7 +681,14 @@ export class Backend {
       totalCount: number;
       entries: EntryValue[];
     }) => void,
+    sync = false,
   ) {
+    const cacheFiles = await getDataFilesByCollection(collection.get('name'));
+
+    if (cacheFiles.length > 0 && !sync) {
+      return cacheFiles;
+    }
+
     if (collection.get('folder') && this.implementation.allEntriesByFolder) {
       const depth = collectionDepth(collection);
       const extension = selectFolderEntryExtension(collection);
@@ -708,11 +720,23 @@ export class Backend {
           collectionRegex(collection),
           wrappedOnProgress,
         )
-        .then(entries => {
+        .then(async entries => {
           console.log(
             `[backend.listAllEntries] allEntriesByFolder returned ${entries.length} entries`,
           );
-          return this.processEntries(entries, collection);
+
+          const all = this.processEntries(entries, collection);
+
+          await saveDataFilesByCollection(
+            collection.get('name'),
+            all.map(entry => ({
+              path: entry.path,
+              raw: entry.raw,
+              json: entry,
+            })),
+          );
+
+          return all;
         });
     }
 
@@ -724,6 +748,9 @@ export class Backend {
       entries.push(...newEntries);
       cursor = newCursor;
     }
+
+    console.log('list all entries', entries);
+
     return entries;
   }
 
@@ -1276,6 +1303,7 @@ export class Backend {
         raw: this.entryToRaw(collection, entryDraft.get('entry')),
         newPath: customPath === path ? undefined : customPath,
         isFolder,
+        json: entryDraft.get('entry').toJS(),
       };
     }
 
@@ -1332,6 +1360,7 @@ export class Backend {
       },
       opts,
     );
+    await saveDataFileToDbCache(collectionName, dataFile);
 
     await this.invokePostSaveEvent(entryDraft.get('entry'));
 
