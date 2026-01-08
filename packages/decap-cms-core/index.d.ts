@@ -361,6 +361,7 @@ declare module 'decap-cms-core' {
     base_url?: string;
     auth_endpoint?: string;
     app_id?: string;
+    anon_key?: string;
     auth_type?: 'implicit' | 'pkce';
     cms_label_prefix?: string;
     squash_merges?: boolean;

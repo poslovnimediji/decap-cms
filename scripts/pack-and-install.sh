@@ -30,6 +30,7 @@ PACKAGES=(
   "decap-cms-backend-gitea"
   "decap-cms-backend-github"
   "decap-cms-backend-gitlab"
+  "decap-cms-backend-supabase-github-proxy"
   "decap-cms-backend-proxy"
   "decap-cms-backend-test"
   "decap-cms-widget-boolean"

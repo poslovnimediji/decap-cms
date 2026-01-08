@@ -1,0 +1,46 @@
+import * as React from 'react';
+import { GitHubBackend } from 'decap-cms-backend-github';
+import { type Config, type User, type Credentials, filterByExtension, entriesByFolder, type Cursor, CURSOR_COMPATIBILITY_SYMBOL } from 'decap-cms-lib-util';
+import { API_NAME } from 'decap-cms-backend-github/src/API';
+import { path } from 'lodash/fp';
+import { SupabaseClient } from './supabase';
+
+
+export default class SupabaseGitHubProxyBackend extends GitHubBackend {
+  supabaseAnonKey: string;
+  supabaseId: string;
+
+  supabase: SupabaseClient;
+
+  constructor(config: Config, options = {}) {
+    super(config, options);    
+    this.supabaseAnonKey = (config.backend.anon_key || config.backend.app_id || '') as string;
+    this.supabaseId = (config.backend.app_id || '') as string;
+
+    this.supabase = new SupabaseClient(
+      `https://${this.supabaseId}.supabase.co/rest/v1/data`,
+      this.supabaseAnonKey,
+      this.branch,
+      this.originRepo,
+    );
+
+  }
+
+  async allEntriesByFolder(folder: string, extension: string, depth: number, pathRegex?: RegExp) {
+
+    const repoURL = this.api!.originRepoURL;
+    const collection = `${folder}:${extension}:${depth}:${pathRegex?.toString() || 'all'}`;
+
+    const files = await this.api!.listFiles(folder, {
+      repoURL,
+      depth,
+    });
+    
+    const readFile = (path: string, id: string | null | undefined) =>
+      this.api!.readFile(path, id, { repoURL }) as Promise<string>;
+
+    this.supabase.validateFiles(collection, files, readFile, this.api!.readFileMetadata.bind(this.api));
+
+    return await this.supabase.fetchEntries(collection);
+  }
+}
