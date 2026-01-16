@@ -39,7 +39,7 @@ export default class SupabaseGitHubProxyBackend extends GitHubBackend {
     const readFile = (path: string, id: string | null | undefined) =>
       this.api!.readFile(path, id, { repoURL }) as Promise<string>;
 
-    this.supabase.validateFiles(collection, files, readFile, this.api!.readFileMetadata.bind(this.api));
+    await this.supabase.validateFiles(collection, files, readFile, this.api!.readFileMetadata.bind(this.api));
 
     return await this.supabase.fetchEntries(collection);
   }
