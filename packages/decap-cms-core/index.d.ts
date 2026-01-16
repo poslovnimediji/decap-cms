@@ -8,6 +8,7 @@ declare module 'decap-cms-core' {
     | 'azure'
     | 'git-gateway'
     | 'github'
+    | 'supabase-github-proxy'
     | 'gitlab'
     | 'gitea'
     | 'bitbucket'
