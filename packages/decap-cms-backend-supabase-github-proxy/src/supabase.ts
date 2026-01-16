@@ -60,7 +60,7 @@ export class SupabaseClient {
 
     while (hasMore) {
       const rangeEnd = rangeStart + batchSize - 1;
-      
+
       try {
         const response = await fetch(`${this.supabaseUrl}${uri}`, {
           method: 'GET',
@@ -68,7 +68,7 @@ export class SupabaseClient {
             apikey: this.supabaseAnonKey,
             Authorization: 'Bearer ' + this.supabaseAnonKey,
             'Content-Type': 'application/json',
-            'Range': `${rangeStart}-${rangeEnd}`,
+            Range: `${rangeStart}-${rangeEnd}`,
           },
         });
 
@@ -80,7 +80,7 @@ export class SupabaseClient {
 
         const text = await response.text();
         const results = text ? JSON.parse(text) : [];
-        
+
         allResults.push(...results);
 
         // Check if we got fewer results than requested, meaning we're done
@@ -104,10 +104,10 @@ export class SupabaseClient {
         this.branch,
       )}&collection=eq.${encodeURIComponent(collection)}`,
     );
-    
+
     return response.map((data: any) => ({
-        file: data.file_meta,
-        data: data.file_data,
+      file: data.file_meta,
+      data: data.file_data,
     }));
   }
 
@@ -150,13 +150,15 @@ export class SupabaseClient {
     });
   }
 
-  async insertDbFilesBatch(files: Array<{
-    collection: string,
-    fileId: string,
-    filePath: string,
-    fileMeta: any,
-    fileData: string | Blob,
-  }>) {
+  async insertDbFilesBatch(
+    files: Array<{
+      collection: string;
+      fileId: string;
+      filePath: string;
+      fileMeta: any;
+      fileData: string | Blob;
+    }>,
+  ) {
     const batch = files.map(file => ({
       repo: this.repo,
       branch: this.branch,
@@ -179,16 +181,19 @@ export class SupabaseClient {
     }
 
     try {
-      const response = await fetch(`${this.supabaseUrl}?on_conflict=repo,branch,collection,file_id`, {
-        method: 'POST',
-        headers: {
-          apikey: this.supabaseAnonKey,
-          Authorization: 'Bearer ' + this.supabaseAnonKey,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates',
+      const response = await fetch(
+        `${this.supabaseUrl}?on_conflict=repo,branch,collection,file_id`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: this.supabaseAnonKey,
+            Authorization: 'Bearer ' + this.supabaseAnonKey,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify(deduplicatedBatch),
         },
-        body: JSON.stringify(deduplicatedBatch),
-      });
+      );
 
       if (!response.ok) {
         const error = await response.json();
@@ -212,7 +217,6 @@ export class SupabaseClient {
   ) {
     let cacheOk = true;
 
-
     const dbFiles = await this.fetchDbFiles(collection);
     const fileIds = files.map(f => f.id);
 
@@ -233,7 +237,11 @@ export class SupabaseClient {
     const batchSize = 500;
     for (let i = 0; i < filesToAdd.length; i += batchSize) {
       const batch = filesToAdd.slice(i, i + batchSize);
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(filesToAdd.length / batchSize)}`);
+      console.log(
+        `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+          filesToAdd.length / batchSize,
+        )}`,
+      );
 
       // Read all files in the batch in parallel
       const loadedEntries = await Promise.all(
