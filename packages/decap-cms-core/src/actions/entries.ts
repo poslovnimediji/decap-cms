@@ -951,7 +951,7 @@ export function persistEntry(collection: Collection) {
           await dispatch(loadMedia());
         }
         dispatch(entryPersisted(collection, serializedEntry, newSlug));
-        if (collection.has('nested')) {
+        if (collection.has('nested') || state.config.backend.name === 'supabase-github-proxy') {
           await dispatch(loadEntries(collection));
         }
         if (entry.get('slug') !== newSlug) {
