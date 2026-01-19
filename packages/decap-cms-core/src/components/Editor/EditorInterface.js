@@ -96,7 +96,7 @@ const NoPreviewContainer = styled.div`
 const EditorContainer = styled.div`
   width: 100%;
   min-width: 800px;
-  height: 100%;
+  height: calc(100% - 29px);
   position: absolute;
   top: 0;
   left: 0;

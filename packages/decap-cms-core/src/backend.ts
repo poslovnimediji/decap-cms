@@ -259,6 +259,7 @@ interface BackendOptions {
   backendName: string;
   config: CmsConfig;
   authStore?: AuthStore;
+  dispatch?: any;
 }
 
 export interface MediaFile {
@@ -294,6 +295,7 @@ interface ImplementationInitOptions {
   useWorkflow: boolean;
   updateUserCredentials: (credentials: Credentials) => void;
   initialWorkflowStatus: string;
+  dispatch?: any;
 }
 
 type Implementation = BackendImplementation & {
@@ -378,7 +380,10 @@ export class Backend {
   user?: User | null;
   backupSync: AsyncLock;
 
-  constructor(implementation: Implementation, { backendName, authStore, config }: BackendOptions) {
+  constructor(
+    implementation: Implementation,
+    { backendName, authStore, config, dispatch }: BackendOptions,
+  ) {
     // We can't reliably run this on exit, so we do cleanup on load.
     this.deleteAnonymousBackup();
     this.config = config;
@@ -386,6 +391,7 @@ export class Backend {
       useWorkflow: selectUseWorkflow(this.config),
       updateUserCredentials: this.updateUserCredentials,
       initialWorkflowStatus: status.first(),
+      dispatch,
     });
     this.backendName = backendName;
     this.authStore = authStore;
@@ -1431,7 +1437,7 @@ export class Backend {
   }
 }
 
-export function resolveBackend(config: CmsConfig) {
+export function resolveBackend(config: CmsConfig, dispatch?: any) {
   if (!config.backend.name) {
     throw new Error('No backend defined in configuration');
   }
@@ -1443,18 +1449,18 @@ export function resolveBackend(config: CmsConfig) {
   if (!backend) {
     throw new Error(`Backend not found: ${name}`);
   } else {
-    return new Backend(backend, { backendName: name, authStore, config });
+    return new Backend(backend, { backendName: name, authStore, config, dispatch });
   }
 }
 
 export const currentBackend = (function () {
   let backend: Backend;
 
-  return (config: CmsConfig) => {
+  return (config: CmsConfig, dispatch?: any) => {
     if (backend) {
       return backend;
     }
 
-    return (backend = resolveBackend(config));
+    return (backend = resolveBackend(config, dispatch));
   };
 })();

@@ -67,6 +67,7 @@ export default class GitHub implements Implementation {
     API: API | null;
     useWorkflow?: boolean;
     initialWorkflowStatus: string;
+    dispatch?: any;
   };
   originRepo: string;
   isBranchConfigured: boolean;
@@ -340,6 +341,22 @@ export default class GitHub implements Implementation {
         this.branch = repoInfo.default_branch;
       }
     }
+
+    const onRateLimitInfo = this.options.dispatch
+      ? (info: {
+          used: number;
+          limit: number;
+          remaining: number;
+          reset: number;
+          resource: string;
+        }) => {
+          this.options.dispatch!({
+            type: 'SET_RATE_LIMIT_INFO',
+            payload: { rateLimitInfo: info },
+          });
+        }
+      : undefined;
+
     const apiCtor = this.useGraphql ? GraphQLAPI : API;
     this.api = new apiCtor({
       token: this.token,
@@ -354,6 +371,7 @@ export default class GitHub implements Implementation {
       initialWorkflowStatus: this.options.initialWorkflowStatus,
       baseUrl: this.baseUrl,
       getUser: args => this.currentUser(args),
+      onRateLimitInfo,
     });
     const user = await this.api!.user();
     const isCollab = await this.api!.hasWriteAccess().catch(error => {
