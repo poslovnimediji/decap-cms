@@ -370,7 +370,7 @@ export default class GitHub implements Implementation {
       useOpenAuthoring: this.useOpenAuthoring,
       initialWorkflowStatus: this.options.initialWorkflowStatus,
       baseUrl: this.baseUrl,
-      getUser: args => this.currentUser(args),
+      getUser: this.currentUser.bind(this),
       onRateLimitInfo,
     });
     const user = await this.api!.user();

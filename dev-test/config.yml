@@ -39,13 +39,6 @@ collections: # A list of collections the CMS should be able to edit
         pattern: \d{4}
       - label: Drafts
         field: draft
-    index_file:
-      pattern: _index
-      editor:
-        preview: false
-      fields: 
-        - { label: 'Title', name: 'title', widget: 'string', tagname: 'h1' }
-        - { label: 'Body', name: 'body', widget: 'markdown', hint: 'Main content goes here.' }
     fields: # The fields each document in this collection have
       - { label: 'Title', name: 'title', widget: 'string', tagname: 'h1' }
       - { label: 'Draft', name: 'draft', widget: 'boolean', default: false }
@@ -62,9 +55,7 @@ collections: # A list of collections the CMS should be able to edit
         required: false
         tagname: ''
 
-      - { label: 'Body', name: 'body', widget: 'richtext', hint: 'Main content goes here.' }
-      - { label: 'Body', name: 'bodyold', widget: 'markdown', hint: 'Main content goes here.' }
-      - { label: 'Body', name: 'bodyold2', widget: 'markdown', hint: 'Main content goes here 2.' }
+      - { label: 'Body', name: 'body', widget: 'markdown', hint: 'Main content goes here.' }
 
   - name: 'restaurants' # Used in routes, ie.: /admin/collections/:slug/edit
     label: 'Restaurants' # Used in the UI
