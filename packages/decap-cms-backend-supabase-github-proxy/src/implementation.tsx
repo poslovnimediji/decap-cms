@@ -36,10 +36,14 @@ export default class SupabaseGitHubProxyBackend extends GitHubBackend {
     const repoURL = this.api!.originRepoURL;
     const collection = `${folder}:${extension}:${depth}:${pathRegex?.toString() || 'all'}`;
 
-    const files = await this.api!.listFiles(folder, {
-      repoURL,
-      depth,
-    });
+    const files = (
+      await this.api!.listFiles(folder, {
+        repoURL,
+        depth,
+      })
+    ).filter(
+      file => (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
+    );
 
     const readFile = (path: string, id: string | null | undefined) =>
       this.api!.readFile(path, id, { repoURL }) as Promise<string>;
