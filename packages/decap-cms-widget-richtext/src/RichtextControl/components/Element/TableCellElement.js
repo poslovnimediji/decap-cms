@@ -8,7 +8,11 @@ const StyledTd = styled.td`
 `;
 
 function TableCellElement({ children, attributes, nodeProps }) {
-  return <StyledTd {...attributes} {...nodeProps}>{children}</StyledTd>;
+  return (
+    <StyledTd {...attributes} {...nodeProps}>
+      {children}
+    </StyledTd>
+  );
 }
 
 export default TableCellElement;
