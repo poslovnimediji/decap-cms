@@ -622,7 +622,7 @@ export class Backend {
   // repeats the process. Once there is no available "next" action, it
   // returns all the collected entries. Used to retrieve all entries
   // for local searches and queries.
-  async listAllEntries(collection: Collection) {
+  async listAllEntries(collection: Collection, searchTerm?: string) {
     if (collection.get('folder') && this.implementation.allEntriesByFolder) {
       const depth = collectionDepth(collection);
       const extension = selectFolderEntryExtension(collection);
@@ -632,6 +632,7 @@ export class Backend {
           extension,
           depth,
           collectionRegex(collection),
+          searchTerm,
         )
         .then(entries => this.processEntries(entries, collection));
     }
@@ -679,10 +680,11 @@ export class Backend {
               }
               return elem;
             }),
+            'body',
           ];
         }
         const filteredSearchFields = searchFields.filter(Boolean) as string[];
-        const collectionEntries = await this.listAllEntries(collection);
+        const collectionEntries = await this.listAllEntries(collection, searchTerm);
         return fuzzy.filter(searchTerm, collectionEntries, {
           extract: extractSearchFields(uniq(filteredSearchFields)),
         });
