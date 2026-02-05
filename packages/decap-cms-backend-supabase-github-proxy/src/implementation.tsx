@@ -32,7 +32,13 @@ export default class SupabaseGitHubProxyBackend extends GitHubBackend {
     );
   }
 
-  async allEntriesByFolder(folder: string, extension: string, depth: number, pathRegex?: RegExp) {
+  async allEntriesByFolder(
+    folder: string,
+    extension: string,
+    depth: number,
+    pathRegex?: RegExp,
+    searchTerm?: string,
+  ) {
     const repoURL = this.api!.originRepoURL;
     const collection = `${folder}:${extension}:${depth}:${pathRegex?.toString() || 'all'}`;
 
@@ -55,7 +61,7 @@ export default class SupabaseGitHubProxyBackend extends GitHubBackend {
       this.api!.readFileMetadata.bind(this.api),
     );
 
-    const entries = await this.supabase.fetchEntries(collection);
+    const entries = await this.supabase.fetchEntries(collection, searchTerm);
     const fileIdToIndex = new Map(files.map((file, index) => [file.id, index]));
     entries.sort((a, b) => {
       const indexA = fileIdToIndex.get(a.file.id) ?? Number.MAX_SAFE_INTEGER;

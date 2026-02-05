@@ -195,6 +195,7 @@ export interface Implementation {
     extension: string,
     depth: number,
     pathRegex?: RegExp,
+    searchTerm?: string,
   ) => Promise<ImplementationEntry[]>;
   traverseCursor?: (
     cursor: Cursor,

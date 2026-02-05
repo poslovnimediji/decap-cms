@@ -97,12 +97,15 @@ export class SupabaseClient {
     return allResults;
   }
 
-  async fetchEntries(collection: string) {
+  async fetchEntries(collection: string, searchTerm?: string) {
     console.log('Fetching entries from supabase for collection:', collection);
+    const searchQuery = searchTerm
+      ? `&file_data=ilike.%25${encodeURIComponent(searchTerm)}%25`
+      : '';
     const response = await this.fetchDbPaginated(
       `?repo=eq.${encodeURIComponent(this.repo)}&branch=eq.${encodeURIComponent(
         this.branch,
-      )}&collection=eq.${encodeURIComponent(collection)}`,
+      )}&collection=eq.${encodeURIComponent(collection)}${searchQuery}`,
     );
 
     return response.map((data: any) => ({
