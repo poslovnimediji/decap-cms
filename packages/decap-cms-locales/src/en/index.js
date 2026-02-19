@@ -48,6 +48,8 @@ const en = {
     collectionTop: {
       sortBy: 'Sort by',
       viewAs: 'View as',
+      viewAsList: 'List view option',
+      viewAsGrid: 'Grid view option',
       newButton: 'New %{collectionLabel}',
       ascending: 'Ascending',
       descending: 'Descending',
@@ -83,6 +85,7 @@ const en = {
     editorControl: {
       field: {
         optional: 'optional',
+        widgetLabel: '%{widgetLabel} field',
       },
     },
     editorControlPane: {
@@ -177,6 +180,10 @@ const en = {
         addComponent: 'Add Component',
         richText: 'Rich Text',
         markdown: 'Markdown',
+        toggleMode: {
+          rich: 'Toggle to rich text mode',
+          markdown: 'Toggle to markdown mode',
+        },
       },
       image: {
         choose: 'Choose an image',
@@ -217,10 +224,15 @@ const en = {
       datetime: {
         now: 'Now',
         clear: 'Clear',
+        setToNow: 'Set %{fieldLabel} to now',
       },
       list: {
         add: 'Add %{item}',
         addType: 'Add %{item}',
+      },
+      object: {
+        expand: 'Expand',
+        collapse: 'Collapse',
       },
     },
   },
@@ -239,6 +251,7 @@ const en = {
     },
     mediaLibraryModal: {
       loading: 'Loading...',
+      close: 'Close',
       noResults: 'No results.',
       noAssetsFound: 'No assets found.',
       noImagesFound: 'No images found.',
@@ -273,6 +286,7 @@ const en = {
     },
     settingsDropdown: {
       logOut: 'Log Out',
+      account: 'Account options dropdown',
     },
     toast: {
       onFailToLoadEntries: 'Failed to load entry: %{details}',
