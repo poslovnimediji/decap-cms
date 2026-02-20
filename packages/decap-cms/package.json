@@ -23,6 +23,7 @@
     "codemirror": "^5.46.0",
     "create-react-class": "^15.7.0",
     "decap-cms-app": "^3.10.0",
+    "decap-cms-media-library-bunny": "^0.1.0",
     "decap-cms-media-library-cloudinary": "^3.1.0",
     "decap-cms-media-library-uploadcare": "^3.0.2",
     "file-loader": "^6.2.0",
