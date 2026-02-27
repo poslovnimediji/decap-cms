@@ -20,9 +20,15 @@ export interface BunnyListResponse {
 
 export interface BunnyConfig {
   storage_zone_name: string;
-  api_key: string;
   cdn_url_prefix: string;
   root_path?: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  isAuthenticating: boolean;
+  apiKey: string | null;
+  error: string | null;
 }
 
 export interface BunnyIntegrationOptions {

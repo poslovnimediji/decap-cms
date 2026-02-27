@@ -6,9 +6,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 import { BunnyFileManager } from '../api/fileManager';
+import { BunnyAuthManager } from '../api/authManager';
 import FileGrid from './FileGrid';
 import FileBrowser from './FileBrowser';
 import FileUpload from './FileUpload';
+import LoginPrompt from './LoginPrompt';
 
 import type { AddressedMediaFile } from '../types';
 
@@ -143,7 +145,6 @@ const styles = {
 interface BunnyWidgetProps {
   config: {
     storage_zone_name: string;
-    api_key: string;
     cdn_url_prefix: string;
     root_path?: string;
   };
@@ -161,6 +162,10 @@ export function BunnyWidget({
   allowMultiple = false,
   imagesOnly = false,
 }: BunnyWidgetProps) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [storageZoneName, setStorageZoneName] = useState<string | null>(null);
+
   const [currentPath, setCurrentPath] = useState<string>(config.root_path || '/');
   const [files, setFiles] = useState<AddressedMediaFile[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -171,31 +176,98 @@ export function BunnyWidget({
 
   const fileManagerRef = useRef<BunnyFileManager | null>(null);
 
-  // Initialize file manager
+  // Check for authentication on mount (from localStorage or URL params after redirect)
   useEffect(() => {
+    console.log('[Bunny Widget] Mounting, checking authentication state...');
+    
+    // Check if index.js is still processing OAuth callback
+    // If we have URL params, the index.js will handle them and redirect
+    const { apiKey: urlApiKey } = BunnyAuthManager.extractCredentialsFromUrl();
+    if (urlApiKey) {
+      console.log('[Bunny Widget] OAuth callback detected, waiting for index.js to process...');
+      // Don't do anything, let index.js handle the OAuth flow
+      return;
+    }
+
+    // Check for existing stored credentials (Storage Zone Password)
+    const storedKey = BunnyAuthManager.getStoredApiKey();
+    const storedZoneName = BunnyAuthManager.getStoredStorageZoneName();
+    console.log('[Bunny Widget] Checking stored credentials:', { 
+      hasStoredKey: !!storedKey, 
+      storedKeyLength: storedKey ? storedKey.length : 0,
+      hasStoredZoneName: !!storedZoneName,
+      storedZoneName 
+    });
+    if (storedKey && storedZoneName) {
+      console.log('[Bunny Widget] Found stored credentials, authenticating');
+      setApiKey(storedKey);
+      setStorageZoneName(storedZoneName);
+      setIsAuthenticated(true);
+    } else {
+      console.log('[Bunny Widget] No credentials found, authentication required');
+    }
+  }, []);
+
+  // Log state changes for debugging
+  useEffect(() => {
+    console.log('[Bunny Widget] State updated:', { 
+      isAuthenticated, 
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0,
+      hasStorageZoneName: !!storageZoneName,
+      storageZoneName 
+    });
+  }, []);
+
+  // Initialize file manager when authenticated
+  useEffect(() => {
+    console.log('[Bunny Widget] File manager init effect, checking conditions:', { 
+      isAuthenticated, 
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0,
+      hasStorageZoneName: !!storageZoneName,
+      storageZoneName 
+    });
+    if (!isAuthenticated || !apiKey || !storageZoneName) {
+      console.log('[Bunny Widget] Not authenticated or missing credentials, skipping file manager init');
+      fileManagerRef.current = null;
+      return;
+    }
+
+    console.log('[Bunny Widget] Initializing file manager with zone:', storageZoneName, 'and API key length:', apiKey.length);
     try {
       fileManagerRef.current = new BunnyFileManager({
-        storageZoneName: config.storage_zone_name,
-        apiKey: config.api_key,
+        storageZoneName,
+        apiKey,
         cdnUrlPrefix: config.cdn_url_prefix,
       });
+      console.log('[Bunny Widget] File manager initialized successfully');
     } catch (err) {
-      setError(`Failed to initialize: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[Bunny Widget] Failed to initialize file manager:', errorMsg);
+      setError(`Failed to initialize: ${errorMsg}`);
     }
-  }, [config]);
+  }, [isAuthenticated, apiKey, storageZoneName, config.cdn_url_prefix]);
 
-  // Load files when path changes
+  // Load files when path changes (only when authenticated)
   useEffect(() => {
-    if (!fileManagerRef.current) return;
+    if (!isAuthenticated || !fileManagerRef.current) {
+      setIsLoading(false);
+      return;
+    }
 
     async function loadFiles() {
       try {
+        console.log('[Bunny Widget] Loading files from path:', currentPath);
         setIsLoading(true);
         setError(null);
         const filesData = await fileManagerRef.current!.getFilesWithUrls(currentPath, imagesOnly);
+        console.log('[Bunny Widget] Loaded', filesData.length, 'files from', currentPath);
         setFiles(filesData);
       } catch (err) {
-        setError(`Failed to load files: ${err instanceof Error ? err.message : String(err)}`);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Bunny Widget] Failed to load files:', errorMsg);
+        setError(`Failed to load files: ${errorMsg}`);
         setFiles([]);
       } finally {
         setIsLoading(false);
@@ -203,7 +275,24 @@ export function BunnyWidget({
     }
 
     loadFiles();
-  }, [currentPath, imagesOnly]);
+  }, [currentPath, imagesOnly, isAuthenticated]);
+
+  function handleLogin() {
+    console.log('[Bunny Widget] Handle login called');
+    // Redirect to Bunny authentication in the same window
+    BunnyAuthManager.redirectToAuth();
+  }
+
+  function handleLogout() {
+    console.log('[Bunny Widget] Handle logout called');
+    BunnyAuthManager.clearStoredApiKey();
+    BunnyAuthManager.clearReturnUrl();
+    setApiKey(null);
+    setIsAuthenticated(false);
+    setFiles([]);
+    setSelectedFiles(new Set());
+    setCurrentPath(config.root_path || '/');
+  }
 
   function handleNavigate(path: string) {
     setCurrentPath(path);
@@ -308,6 +397,35 @@ export function BunnyWidget({
     onClose();
   }
 
+  const closeButtonStyle = {
+    ...styles.closeButton,
+  };
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div style={styles.widget}>
+        <div style={styles.container}>
+          <div style={styles.header}>
+            <h2 style={styles.headerTitle}>Bunny.net Media Library</h2>
+            <button
+              style={closeButtonStyle}
+              onClick={onClose}
+              title="Close"
+              onMouseEnter={e => (e.currentTarget.style.color = '#333')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#666')}
+            >
+              ✕
+            </button>
+          </div>
+          <LoginPrompt onLogin={handleLogin} />
+        </div>
+        <div style={styles.backdrop} onClick={onClose} />
+      </div>
+    );
+  }
+
+  // Main widget UI (after authentication)
   return (
     <div style={styles.widget}>
       <div style={styles.container}>
@@ -315,7 +433,7 @@ export function BunnyWidget({
         <div style={styles.header}>
           <h2 style={styles.headerTitle}>Bunny.net Media Library</h2>
           <button
-            style={styles.closeButton}
+            style={closeButtonStyle}
             onClick={onClose}
             title="Close"
             onMouseEnter={e => (e.currentTarget.style.color = '#333')}
@@ -363,6 +481,15 @@ export function BunnyWidget({
 
         {/* Footer Actions */}
         <div style={styles.footer}>
+          <button
+            style={styles.buttonSecondary}
+            onClick={handleLogout}
+            title="Logout from Bunny"
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#d0d0d0')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#e0e0e0')}
+          >
+            Logout
+          </button>
           <button
             style={styles.buttonSecondary}
             onClick={onClose}

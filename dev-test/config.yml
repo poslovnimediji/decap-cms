@@ -2,8 +2,6 @@ local_backend: true
 
 backend:
   name: git-gateway
-  branch: local
-  squash_merges: true
 
 display_url: http://localhost:1313
 logo_url: /media/brand/logo.svg
@@ -14,8 +12,26 @@ media_library:
   name: bunny
   config:
     storage_zone_name: cmt-docs
-    api_key: 053a7248-17a6-42bd-a32bea3b0436-f0c5-4a23
     cdn_url_prefix: https://cmt-docs-cdn.b-cdn.net
+    # Note: API authentication happens in the browser via OAuth flow
+    # Users will be prompted to log in when opening the media library
+
+
+
+    # https://docs.bunny.net/api-reference/core/storage-zone/get-storage-zone
+
+    # example of login url
+    # callback in domena morata bit ista, sicer gre pa vse skozi
+    # mogoče čekirajo referrer header
+    # https://dash.bunny.net/auth/login?source=wp-plugin&domain=https:%2F%2Fdemo.example.com&callbackUrl=https:%2F%2Fdemo.example.com%2Fwp-admin%2Fadmin.php%3Fpage%3Dbunnycdn
+
+
+# media_library:
+#   name: cloudinary
+#   config:
+#     cloud_name: poslovnimediji
+#     api_key: 712288282278836
+#     folder: pm-www
 
 slug:
   encoding: ascii
