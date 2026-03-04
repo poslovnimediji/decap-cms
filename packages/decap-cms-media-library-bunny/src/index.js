@@ -43,7 +43,10 @@ async function init({ options = {}, handleInsert = () => {} } = {}) {
     BunnyAuthManager.setStoredStorageZoneName(zoneName);
 
     const { BunnyManagementApi } = await import('./api/managementApi');
-    const storageZonePassword = await BunnyManagementApi.fetchStorageZonePassword(accountApiKey, zoneName);
+    const storageZonePassword = await BunnyManagementApi.fetchStorageZonePassword(
+      accountApiKey,
+      zoneName,
+    );
     BunnyAuthManager.setStoredApiKey(storageZonePassword);
 
     const shouldAutoOpen = BunnyAuthManager.shouldAutoOpen();

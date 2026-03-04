@@ -71,7 +71,7 @@ export class BunnyClient {
         status: response.status,
         statusText: response.statusText,
         body: errorBody,
-        headers: Object.fromEntries(response.headers.entries())
+        headers: Object.fromEntries(response.headers.entries()),
       });
       throw new Error(`Bunny.net API error: ${response.status} - ${errorBody}`);
     }

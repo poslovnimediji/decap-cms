@@ -28,8 +28,6 @@ export class BunnyAuthManager {
   static setStoredApiKey(apiKey: string): void {
     try {
       localStorage.setItem(STORAGE_API_KEY, apiKey);
-      // Verify it was stored
-      const stored = localStorage.getItem(STORAGE_API_KEY);
     } catch (e) {
       console.error('[Bunny Auth] Failed to store Storage Zone Password:', e);
     }
@@ -53,8 +51,6 @@ export class BunnyAuthManager {
   static setStoredAccountApiKey(apiKey: string): void {
     try {
       localStorage.setItem(ACCOUNT_API_KEY, apiKey);
-      // Verify it was stored
-      const stored = localStorage.getItem(ACCOUNT_API_KEY);
     } catch (e) {
       console.error('[Bunny Auth] Failed to store Account API Key:', e);
     }
@@ -281,8 +277,8 @@ export class BunnyAuthManager {
     const hashQueryParams = hasHashQuery
       ? new URLSearchParams(hashContent.slice(hashQueryIndex + 1))
       : hashContent.includes('=')
-        ? new URLSearchParams(hashContent)
-        : new URLSearchParams();
+      ? new URLSearchParams(hashContent)
+      : new URLSearchParams();
     const authParamNames = [
       'accessKey',
       'apiKey',
@@ -314,7 +310,9 @@ export class BunnyAuthManager {
       const hashQuery = hashQueryParams.toString();
       const hashPrefix = hashRoute ? `#${hashRoute}` : hashQuery ? '#' : '';
       const hashSuffix = hashQuery ? `${hashRoute ? '?' : ''}${hashQuery}` : '';
-      const newUrl = `${window.location.pathname}${searchQuery ? `?${searchQuery}` : ''}${hashPrefix}${hashSuffix}`;
+      const newUrl = `${window.location.pathname}${
+        searchQuery ? `?${searchQuery}` : ''
+      }${hashPrefix}${hashSuffix}`;
       window.history.replaceState({}, '', newUrl);
     }
   }
@@ -326,17 +324,15 @@ export class BunnyAuthManager {
     try {
       const parsedUrl = new URL(url, window.location.origin);
       const searchParams = new URLSearchParams(parsedUrl.search);
-      const hashContent = parsedUrl.hash.startsWith('#')
-        ? parsedUrl.hash.slice(1)
-        : parsedUrl.hash;
+      const hashContent = parsedUrl.hash.startsWith('#') ? parsedUrl.hash.slice(1) : parsedUrl.hash;
       const hashQueryIndex = hashContent.indexOf('?');
       const hashRoute = hashQueryIndex >= 0 ? hashContent.slice(0, hashQueryIndex) : hashContent;
       const hashQueryParams =
         hashQueryIndex >= 0
           ? new URLSearchParams(hashContent.slice(hashQueryIndex + 1))
           : hashContent.includes('=')
-            ? new URLSearchParams(hashContent)
-            : new URLSearchParams();
+          ? new URLSearchParams(hashContent)
+          : new URLSearchParams();
 
       const authParamNames = [
         'accessKey',
@@ -366,7 +362,9 @@ export class BunnyAuthManager {
       const hashPrefix = hashRoute ? `#${hashRoute}` : hashQuery ? '#' : '';
       const hashSuffix = hashQuery ? `${hashRoute ? '?' : ''}${hashQuery}` : '';
 
-      return `${parsedUrl.pathname}${searchQuery ? `?${searchQuery}` : ''}${hashPrefix}${hashSuffix}`;
+      return `${parsedUrl.pathname}${
+        searchQuery ? `?${searchQuery}` : ''
+      }${hashPrefix}${hashSuffix}`;
     } catch (e) {
       console.warn('[Bunny Auth] Failed to sanitize return URL, using raw value');
       return url;

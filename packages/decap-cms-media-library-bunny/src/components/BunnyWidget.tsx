@@ -178,13 +178,10 @@ export function BunnyWidget({
 
   // Check for authentication on mount (from localStorage or URL params after redirect)
   useEffect(() => {
-    console.log('[Bunny Widget] Mounting, checking authentication state...');
-    
     // Check if index.js is still processing OAuth callback
     // If we have URL params, the index.js will handle them and redirect
     const { apiKey: urlApiKey } = BunnyAuthManager.extractCredentialsFromUrl();
     if (urlApiKey) {
-      console.log('[Bunny Widget] OAuth callback detected, waiting for index.js to process...');
       // Don't do anything, let index.js handle the OAuth flow
       return;
     }
@@ -192,56 +189,26 @@ export function BunnyWidget({
     // Check for existing stored credentials (Storage Zone Password)
     const storedKey = BunnyAuthManager.getStoredApiKey();
     const storedZoneName = BunnyAuthManager.getStoredStorageZoneName();
-    console.log('[Bunny Widget] Checking stored credentials:', { 
-      hasStoredKey: !!storedKey, 
-      storedKeyLength: storedKey ? storedKey.length : 0,
-      hasStoredZoneName: !!storedZoneName,
-      storedZoneName 
-    });
     if (storedKey && storedZoneName) {
-      console.log('[Bunny Widget] Found stored credentials, authenticating');
       setApiKey(storedKey);
       setStorageZoneName(storedZoneName);
       setIsAuthenticated(true);
-    } else {
-      console.log('[Bunny Widget] No credentials found, authentication required');
     }
-  }, []);
-
-  // Log state changes for debugging
-  useEffect(() => {
-    console.log('[Bunny Widget] State updated:', { 
-      isAuthenticated, 
-      hasApiKey: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0,
-      hasStorageZoneName: !!storageZoneName,
-      storageZoneName 
-    });
   }, []);
 
   // Initialize file manager when authenticated
   useEffect(() => {
-    console.log('[Bunny Widget] File manager init effect, checking conditions:', { 
-      isAuthenticated, 
-      hasApiKey: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0,
-      hasStorageZoneName: !!storageZoneName,
-      storageZoneName 
-    });
     if (!isAuthenticated || !apiKey || !storageZoneName) {
-      console.log('[Bunny Widget] Not authenticated or missing credentials, skipping file manager init');
       fileManagerRef.current = null;
       return;
     }
 
-    console.log('[Bunny Widget] Initializing file manager with zone:', storageZoneName, 'and API key length:', apiKey.length);
     try {
       fileManagerRef.current = new BunnyFileManager({
         storageZoneName,
         apiKey,
         cdnUrlPrefix: config.cdn_url_prefix,
       });
-      console.log('[Bunny Widget] File manager initialized successfully');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error('[Bunny Widget] Failed to initialize file manager:', errorMsg);
@@ -258,11 +225,9 @@ export function BunnyWidget({
 
     async function loadFiles() {
       try {
-        console.log('[Bunny Widget] Loading files from path:', currentPath);
         setIsLoading(true);
         setError(null);
         const filesData = await fileManagerRef.current!.getFilesWithUrls(currentPath, imagesOnly);
-        console.log('[Bunny Widget] Loaded', filesData.length, 'files from', currentPath);
         setFiles(filesData);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -278,13 +243,11 @@ export function BunnyWidget({
   }, [currentPath, imagesOnly, isAuthenticated]);
 
   function handleLogin() {
-    console.log('[Bunny Widget] Handle login called');
     // Redirect to Bunny authentication in the same window
     BunnyAuthManager.redirectToAuth();
   }
 
   function handleLogout() {
-    console.log('[Bunny Widget] Handle logout called');
     BunnyAuthManager.clearStoredApiKey();
     BunnyAuthManager.clearReturnUrl();
     setApiKey(null);

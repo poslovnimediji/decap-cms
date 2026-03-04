@@ -45,9 +45,7 @@ export class BunnyManagementApi {
           statusText: response.statusText,
           body: errorBody,
         });
-        throw new Error(
-          `Failed to fetch storage zones: ${response.status} - ${errorBody}`,
-        );
+        throw new Error(`Failed to fetch storage zones: ${response.status} - ${errorBody}`);
       }
 
       const storageZones: StorageZone[] = await response.json();
@@ -59,9 +57,14 @@ export class BunnyManagementApi {
 
       if (!targetZone) {
         console.error('[Bunny Management API] Storage zone not found:', storageZoneName);
-        console.error('[Bunny Management API] Available zones:', storageZones.map(z => z.Name));
+        console.error(
+          '[Bunny Management API] Available zones:',
+          storageZones.map(z => z.Name),
+        );
         throw new Error(
-          `Storage zone "${storageZoneName}" not found. Available zones: ${storageZones.map(z => z.Name).join(', ')}`,
+          `Storage zone "${storageZoneName}" not found. Available zones: ${storageZones
+            .map(z => z.Name)
+            .join(', ')}`,
         );
       }
 

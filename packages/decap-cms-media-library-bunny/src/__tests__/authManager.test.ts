@@ -68,11 +68,7 @@ describe('BunnyAuthManager', () => {
 
     BunnyAuthManager.cleanAuthParamsFromUrl();
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      {},
-      '',
-      '/admin/?keep=1#/collections/posts/new?ok=2',
-    );
+    expect(replaceSpy).toHaveBeenCalledWith({}, '', '/admin/?keep=1#/collections/posts/new?ok=2');
   });
 
   it('stores and clears auto-open flag', () => {
