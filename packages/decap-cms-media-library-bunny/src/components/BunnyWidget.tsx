@@ -11,136 +11,23 @@ import FileGrid from './FileGrid';
 import FileBrowser from './FileBrowser';
 import FileUpload from './FileUpload';
 import LoginPrompt from './LoginPrompt';
+import {
+  StyledWidget,
+  StyledBackdrop,
+  StyledContainer,
+  StyledHeader,
+  StyledHeaderTitle,
+  StyledCloseButton,
+  StyledError,
+  StyledFileGridContainer,
+  StyledLoading,
+  StyledEmpty,
+  StyledFooter,
+  StyledButtonPrimary,
+  StyledButtonSecondary,
+} from './styles';
 
 import type { AddressedMediaFile } from '../types';
-
-const styles = {
-  widget: {
-    position: 'fixed' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    zIndex: 99999,
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-  },
-  backdrop: {
-    position: 'fixed' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    zIndex: -1,
-  },
-  container: {
-    position: 'relative' as const,
-    width: '90%',
-    maxWidth: '1200px',
-    height: '90vh',
-    background: 'white',
-    borderRadius: '8px',
-    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-    display: 'flex' as const,
-    flexDirection: 'column' as const,
-    overflow: 'hidden' as const,
-  },
-  header: {
-    padding: '20px 24px',
-    borderBottom: '1px solid #e0e0e0',
-    display: 'flex' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    background: '#f9f9f9',
-  },
-  headerTitle: {
-    margin: 0,
-    fontSize: '20px',
-    fontWeight: 600,
-    color: '#333',
-  },
-  closeButton: {
-    background: 'none',
-    border: 'none',
-    fontSize: '24px',
-    cursor: 'pointer',
-    padding: 0,
-    width: '32px',
-    height: '32px',
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    color: '#666',
-    transition: 'color 0.2s',
-  },
-  error: {
-    padding: '12px 24px',
-    backgroundColor: '#fee',
-    color: '#c33',
-    borderBottom: '1px solid #e0e0e0',
-    fontSize: '14px',
-  },
-  fileGridContainer: {
-    flex: 1,
-    overflowY: 'auto' as const,
-    padding: '20px 24px',
-    background: 'white',
-  },
-  loading: {
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    height: '100%',
-    color: '#999',
-    fontSize: '16px',
-  },
-  empty: {
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    height: '100%',
-    color: '#999',
-    fontSize: '16px',
-  },
-  footer: {
-    padding: '16px 24px',
-    borderTop: '1px solid #e0e0e0',
-    background: '#f9f9f9',
-    display: 'flex' as const,
-    justifyContent: 'flex-end' as const,
-    gap: '12px',
-  },
-  buttonPrimary: {
-    padding: '8px 16px',
-    backgroundColor: '#0066cc',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
-    fontWeight: 500 as const,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  buttonPrimaryDisabled: {
-    backgroundColor: '#ccc',
-    cursor: 'not-allowed',
-  },
-  buttonSecondary: {
-    padding: '8px 16px',
-    backgroundColor: '#e0e0e0',
-    color: '#333',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
-    fontWeight: 500 as const,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-};
 
 interface BunnyWidgetProps {
   config: {
@@ -360,54 +247,38 @@ export function BunnyWidget({
     onClose();
   }
 
-  const closeButtonStyle = {
-    ...styles.closeButton,
-  };
-
   // Show login prompt if not authenticated
   if (!isAuthenticated) {
     return (
-      <div style={styles.widget}>
-        <div style={styles.container}>
-          <div style={styles.header}>
-            <h2 style={styles.headerTitle}>Bunny.net Media Library</h2>
-            <button
-              style={closeButtonStyle}
-              onClick={onClose}
-              title="Close"
-              onMouseEnter={e => (e.currentTarget.style.color = '#333')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#666')}
-            >
+      <StyledWidget>
+        <StyledContainer>
+          <StyledHeader>
+            <StyledHeaderTitle>Bunny.net Media Library</StyledHeaderTitle>
+            <StyledCloseButton onClick={onClose} title="Close">
               ✕
-            </button>
-          </div>
+            </StyledCloseButton>
+          </StyledHeader>
           <LoginPrompt onLogin={handleLogin} />
-        </div>
-        <div style={styles.backdrop} onClick={onClose} />
-      </div>
+        </StyledContainer>
+        <StyledBackdrop onClick={onClose} />
+      </StyledWidget>
     );
   }
 
   // Main widget UI (after authentication)
   return (
-    <div style={styles.widget}>
-      <div style={styles.container}>
+    <StyledWidget>
+      <StyledContainer>
         {/* Header */}
-        <div style={styles.header}>
-          <h2 style={styles.headerTitle}>Bunny.net Media Library</h2>
-          <button
-            style={closeButtonStyle}
-            onClick={onClose}
-            title="Close"
-            onMouseEnter={e => (e.currentTarget.style.color = '#333')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#666')}
-          >
+        <StyledHeader>
+          <StyledHeaderTitle>Bunny.net Media Library</StyledHeaderTitle>
+          <StyledCloseButton onClick={onClose} title="Close">
             ✕
-          </button>
-        </div>
+          </StyledCloseButton>
+        </StyledHeader>
 
         {/* Error Message */}
-        {error && <div style={styles.error}>{error}</div>}
+        {error && <StyledError>{error}</StyledError>}
 
         {/* Navigation */}
         <FileBrowser
@@ -425,11 +296,11 @@ export function BunnyWidget({
         />
 
         {/* File Grid */}
-        <div style={styles.fileGridContainer}>
+        <StyledFileGridContainer>
           {isLoading ? (
-            <div style={styles.loading}>Loading files...</div>
+            <StyledLoading>Loading files...</StyledLoading>
           ) : files.length === 0 ? (
-            <div style={styles.empty}>No files found</div>
+            <StyledEmpty>No files found</StyledEmpty>
           ) : (
             <FileGrid
               files={files}
@@ -440,55 +311,25 @@ export function BunnyWidget({
               allowMultiple={allowMultiple}
             />
           )}
-        </div>
+        </StyledFileGridContainer>
 
         {/* Footer Actions */}
-        <div style={styles.footer}>
-          <button
-            style={styles.buttonSecondary}
-            onClick={handleLogout}
-            title="Logout from Bunny"
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#d0d0d0')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#e0e0e0')}
-          >
+        <StyledFooter>
+          <StyledButtonSecondary onClick={handleLogout} title="Logout from Bunny">
             Logout
-          </button>
-          <button
-            style={styles.buttonSecondary}
-            onClick={onClose}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#d0d0d0')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#e0e0e0')}
-          >
-            Cancel
-          </button>
+          </StyledButtonSecondary>
+          <StyledButtonSecondary onClick={onClose}>Cancel</StyledButtonSecondary>
           {selectedFiles.size > 0 && (
-            <button
-              style={{
-                ...styles.buttonPrimary,
-                ...(isUploading || isLoading ? styles.buttonPrimaryDisabled : {}),
-              }}
-              onClick={handleInsertSelected}
-              disabled={isUploading || isLoading}
-              onMouseEnter={
-                isUploading || isLoading
-                  ? undefined
-                  : e => (e.currentTarget.style.backgroundColor = '#0052a3')
-              }
-              onMouseLeave={
-                isUploading || isLoading
-                  ? undefined
-                  : e => (e.currentTarget.style.backgroundColor = '#0066cc')
-              }
-            >
+            <StyledButtonPrimary onClick={handleInsertSelected} disabled={isUploading || isLoading}>
               Insert ({selectedFiles.size})
-            </button>
+            </StyledButtonPrimary>
           )}
-        </div>
-      </div>
+        </StyledFooter>
+      </StyledContainer>
 
       {/* Backdrop */}
-      <div style={styles.backdrop} onClick={onClose} />
-    </div>
+      <StyledBackdrop onClick={onClose} />
+    </StyledWidget>
   );
 }
 

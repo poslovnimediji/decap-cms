@@ -30,5 +30,10 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "decap-cms-lib-util": "^3.0.0"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "decap-cms-ui-default": "^3.0.0"
   }
 }
