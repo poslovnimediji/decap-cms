@@ -71,16 +71,6 @@ describe('BunnyAuthManager', () => {
     expect(replaceSpy).toHaveBeenCalledWith({}, '', '/admin/?keep=1#/collections/posts/new?ok=2');
   });
 
-  it('stores and clears auto-open flag', () => {
-    expect(BunnyAuthManager.shouldAutoOpen()).toBe(false);
-
-    BunnyAuthManager.setAutoOpenFlag();
-    expect(BunnyAuthManager.shouldAutoOpen()).toBe(true);
-
-    BunnyAuthManager.clearAutoOpenFlag();
-    expect(BunnyAuthManager.shouldAutoOpen()).toBe(false);
-  });
-
   it('saves and resolves sanitized return URL', () => {
     BunnyAuthManager.saveReturnUrl(
       'http://localhost:8080/admin/?x=1&token=secret#/collections/posts/new?storageZoneName=zone&y=2',

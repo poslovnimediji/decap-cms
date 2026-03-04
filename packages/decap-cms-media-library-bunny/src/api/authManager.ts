@@ -7,7 +7,6 @@ const STORAGE_API_KEY = 'bunny_auth_key';
 const ACCOUNT_API_KEY = 'bunny_account_api_key';
 const STORAGE_ZONE_NAME_KEY = 'bunny_storage_zone_name';
 const RETURN_URL_KEY = 'bunny_return_url';
-const AUTO_OPEN_FLAG_KEY = 'bunny_auto_open';
 
 // Helper functions for safe localStorage access
 function safeGetItem(key: string, errorMsg: string): string | null {
@@ -81,20 +80,6 @@ export class BunnyAuthManager {
 
   static clearReturnUrl(): void {
     safeRemoveItem(RETURN_URL_KEY, '[Bunny Auth] Failed to clear return URL:');
-  }
-
-  static setAutoOpenFlag(): void {
-    safeSetItem(AUTO_OPEN_FLAG_KEY, 'true', '[Bunny Auth] Failed to set auto-open flag:');
-  }
-
-  static shouldAutoOpen(): boolean {
-    return (
-      safeGetItem(AUTO_OPEN_FLAG_KEY, '[Bunny Auth] Failed to check auto-open flag:') === 'true'
-    );
-  }
-
-  static clearAutoOpenFlag(): void {
-    safeRemoveItem(AUTO_OPEN_FLAG_KEY, '[Bunny Auth] Failed to clear auto-open flag:');
   }
 
   // Auth parameter names to check in URLs
@@ -188,7 +173,6 @@ export class BunnyAuthManager {
 
   static redirectToAuth(): void {
     this.saveReturnUrl();
-    this.setAutoOpenFlag();
     window.location.href = this.generateAuthUrl();
   }
 

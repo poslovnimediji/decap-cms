@@ -49,21 +49,12 @@ async function init({ options = {}, handleInsert = () => {} } = {}) {
     );
     BunnyAuthManager.setStoredApiKey(storageZonePassword);
 
-    const shouldAutoOpen = BunnyAuthManager.shouldAutoOpen();
     const returnUrl = BunnyAuthManager.resolveReturnUrl();
     BunnyAuthManager.cleanAuthParamsFromUrl();
 
     if (returnUrl) {
       BunnyAuthManager.clearReturnUrl();
       setTimeout(() => safelyRedirectToReturnUrl(returnUrl), 100);
-      return;
-    }
-
-    if (shouldAutoOpen) {
-      BunnyAuthManager.clearAutoOpenFlag();
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('bunny-auth-complete'));
-      }, 500);
     }
   }
 
@@ -161,27 +152,6 @@ async function init({ options = {}, handleInsert = () => {} } = {}) {
      */
     enableStandalone: () => true,
   };
-
-  window.addEventListener('bunny-auth-complete', () => {
-    setTimeout(() => {
-      mediaLibraryInstance.show({});
-    }, 100);
-  });
-
-  if (BunnyAuthManager.shouldAutoOpen() && BunnyAuthManager.getStoredApiKey()) {
-    BunnyAuthManager.clearAutoOpenFlag();
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-          mediaLibraryInstance.show({});
-        }, 500);
-      });
-    } else {
-      setTimeout(() => {
-        mediaLibraryInstance.show({});
-      }, 500);
-    }
-  }
 
   return mediaLibraryInstance;
 }
