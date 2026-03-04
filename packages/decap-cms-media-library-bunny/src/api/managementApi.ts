@@ -26,13 +26,9 @@ export class BunnyManagementApi {
     accountApiKey: string,
     storageZoneName: string,
   ): Promise<string> {
-    console.log('[Bunny Management API] Fetching storage zone password for:', storageZoneName);
-    console.log('[Bunny Management API] Using account API key length:', accountApiKey.length);
-
     try {
       // First, list all storage zones to find the one we need
       const listUrl = `${BUNNY_API_BASE}/storagezone`;
-      console.log('[Bunny Management API] Requesting:', listUrl);
 
       const response = await fetch(listUrl, {
         method: 'GET',
@@ -55,7 +51,6 @@ export class BunnyManagementApi {
       }
 
       const storageZones: StorageZone[] = await response.json();
-      console.log('[Bunny Management API] Fetched', storageZones.length, 'storage zones');
 
       // Find the storage zone by name
       const targetZone = storageZones.find(
@@ -70,19 +65,10 @@ export class BunnyManagementApi {
         );
       }
 
-      console.log('[Bunny Management API] Found storage zone:', {
-        id: targetZone.Id,
-        name: targetZone.Name,
-        region: targetZone.Region,
-        hasPassword: !!targetZone.Password,
-        passwordLength: targetZone.Password ? targetZone.Password.length : 0,
-      });
-
       if (!targetZone.Password) {
         throw new Error(`Storage zone "${storageZoneName}" has no password set`);
       }
 
-      console.log('[Bunny Management API] Successfully retrieved storage zone password');
       return targetZone.Password;
     } catch (error) {
       console.error('[Bunny Management API] Failed to fetch storage zone password:', error);
@@ -97,8 +83,6 @@ export class BunnyManagementApi {
     accountApiKey: string,
     storageZoneId: number,
   ): Promise<StorageZone> {
-    console.log('[Bunny Management API] Fetching storage zone by ID:', storageZoneId);
-
     const url = `${BUNNY_API_BASE}/storagezone/${storageZoneId}`;
     const response = await fetch(url, {
       method: 'GET',

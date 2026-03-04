@@ -27,11 +27,9 @@ export class BunnyAuthManager {
    */
   static setStoredApiKey(apiKey: string): void {
     try {
-      console.log('[Bunny Auth] Storing Storage Zone Password, length:', apiKey ? apiKey.length : 0);
       localStorage.setItem(STORAGE_API_KEY, apiKey);
       // Verify it was stored
       const stored = localStorage.getItem(STORAGE_API_KEY);
-      console.log('[Bunny Auth] Storage Zone Password stored successfully, verified length:', stored ? stored.length : 0);
     } catch (e) {
       console.error('[Bunny Auth] Failed to store Storage Zone Password:', e);
     }
@@ -54,11 +52,9 @@ export class BunnyAuthManager {
    */
   static setStoredAccountApiKey(apiKey: string): void {
     try {
-      console.log('[Bunny Auth] Storing Account API Key, length:', apiKey ? apiKey.length : 0);
       localStorage.setItem(ACCOUNT_API_KEY, apiKey);
       // Verify it was stored
       const stored = localStorage.getItem(ACCOUNT_API_KEY);
-      console.log('[Bunny Auth] Account API Key stored successfully, verified length:', stored ? stored.length : 0);
     } catch (e) {
       console.error('[Bunny Auth] Failed to store Account API Key:', e);
     }
@@ -107,7 +103,6 @@ export class BunnyAuthManager {
   static saveReturnUrl(url: string = window.location.href): void {
     try {
       const sanitizedUrl = this.sanitizeReturnUrl(url);
-      console.log('[Bunny Auth] Saving return URL:', sanitizedUrl);
       localStorage.setItem(RETURN_URL_KEY, sanitizedUrl);
     } catch (e) {
       console.error('[Bunny Auth] Failed to save return URL:', e);
@@ -143,7 +138,6 @@ export class BunnyAuthManager {
   static setAutoOpenFlag(): void {
     try {
       localStorage.setItem(AUTO_OPEN_FLAG_KEY, 'true');
-      console.log('[Bunny Auth] Auto-open flag set');
     } catch (e) {
       console.error('[Bunny Auth] Failed to set auto-open flag:', e);
     }
@@ -167,7 +161,6 @@ export class BunnyAuthManager {
   static clearAutoOpenFlag(): void {
     try {
       localStorage.removeItem(AUTO_OPEN_FLAG_KEY);
-      console.log('[Bunny Auth] Auto-open flag cleared');
     } catch (e) {
       console.error('[Bunny Auth] Failed to clear auto-open flag:', e);
     }
@@ -189,7 +182,6 @@ export class BunnyAuthManager {
       callbackUrl,
     });
 
-    console.log('[Bunny Auth] Generated auth URL:', authUrl);
     return `${authUrl}?${params.toString()}`;
   }
 
@@ -204,13 +196,11 @@ export class BunnyAuthManager {
    * Redirect to Bunny authentication in the same window
    */
   static redirectToAuth(): void {
-    console.log('[Bunny Auth] Initiating redirect to authentication');
     // Save current location before redirecting
     this.saveReturnUrl();
     // Set flag to auto-open media library after auth
     this.setAutoOpenFlag();
     const authUrl = this.generateAuthUrl();
-    console.log('[Bunny Auth] Redirecting to:', authUrl);
     window.location.href = authUrl;
   }
 
@@ -271,13 +261,7 @@ export class BunnyAuthManager {
       null;
 
     if (apiKey || storageName) {
-      console.log('[Bunny Auth] Credentials extracted from URL', {
-        hasApiKey: !!apiKey,
-        hasStorageName: !!storageName,
-        storageName,
-        apiKeyFormat: apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(Math.max(0, apiKey.length - 8))} (length: ${apiKey.length})` : 'N/A'
-      });
-      console.log('[Bunny Auth] IMPORTANT: The apiKey from Bunny OAuth must be your Storage Zone Password, not an account API key');
+      // Credentials found in URL
     }
 
     return { apiKey, storageName };
@@ -331,7 +315,6 @@ export class BunnyAuthManager {
       const hashPrefix = hashRoute ? `#${hashRoute}` : hashQuery ? '#' : '';
       const hashSuffix = hashQuery ? `${hashRoute ? '?' : ''}${hashQuery}` : '';
       const newUrl = `${window.location.pathname}${searchQuery ? `?${searchQuery}` : ''}${hashPrefix}${hashSuffix}`;
-      console.log('[Bunny Auth] Cleaned auth params from URL, new URL:', newUrl);
       window.history.replaceState({}, '', newUrl);
     }
   }
@@ -397,9 +380,6 @@ export class BunnyAuthManager {
     const hasKey = !!this.getStoredApiKey();
     const hasZoneName = !!this.getStoredStorageZoneName();
     const isAuth = hasKey && hasZoneName;
-    if (isAuth) {
-      console.log('[Bunny Auth] Authenticated: true');
-    }
     return isAuth;
   }
 }

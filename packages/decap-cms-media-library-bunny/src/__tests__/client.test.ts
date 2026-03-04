@@ -66,6 +66,10 @@ describe('BunnyClient', () => {
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: false,
       status: 401,
+      statusText: 'Unauthorized',
+      headers: {
+        entries: () => [],
+      },
       text: async () => 'Unauthorized',
     });
 

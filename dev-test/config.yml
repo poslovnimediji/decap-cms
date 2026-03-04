@@ -54,7 +54,35 @@ aliases:
       *TITLE_OPTIONAL,
     ]
   - &IMAGE_OBJECT {name: image, widget: object, i18n: true, collapsed: true, fields: *IMAGE_OBJECT_FIELDS}
-
+  - &TEXT_COLUMNS {label: Text Columns, name: text-columns, i18n: true,widget: object, fields: [
+      {name: type, widget: hidden, default: text-columns},
+      {name: smallTitle, label: Small Title, widget: string, i18n: true, required: false, hint: "Optional uppercase title above main heading"},
+      *TITLE,
+      {name: textLeft, label: Text Left, widget: text, i18n: true, required: false},
+      {name: textRight, label: Text Right, widget: text, i18n: true, required: true},
+      *BUTTON,
+    ]}
+  - &ICON_SELECT {label: Icon, name: icon, widget: select, i18n: duplicate, options: [ac_unit_600, account_balance_600, add_2_700, alternate_email_600, approval_delegation_600, arrow_backward_700, arrow_downward_700, arrow_forward_700, arrow_outward_700, bedtime_600, block_600, boat_bus_600, bullet-point_600, business_center_600, calendar_month_600, call_600, castle_600, celebration_600, check_700, circle_600, clock_loader_60_600, close_700, Collegium_non-colored, delete_700, diamond_600, directions_run_600, diversity_1_600, diversity_4_600, Facebook_apple-sf-regular-2, filter_vintage_600, flights_and_hotels_600, group_600, handshake_600, hot_tub_600, icon-placeholder, icon-placeholder-1, image_600, info_700, Instagram_apple-sf-regular, keyboard_arrow_down_1000, keyboard_arrow_down_700, keyboard_arrow_right_1000, keyboard_arrow_right_700, keyboard_arrow_up_1000, keyboard_arrow_up_700, light_mode_600, live_help_600, live_help_700, location_on_600, moon_stars_600, Parking_600, payment_arrow_down_600, personal_bag_600, play_600, pool_600, restaurant_600, routine_600, sauna_600, sentiment_calm_600, spa_600, Sparkling, star_600, star_shine_600, TikTok_apple-sf-regular, verified_user_600, WhatsApp, YouTube_apple-sf-regular]}
+  - &ANCHOR_CARDS {label: Anchor Cards, name: anchor-cards, widget: object, fields: [
+      {name: type, widget: hidden, default: anchor-cards},
+      {label: Small Title, name: smallTitle, widget: string, i18n: true, required: false},
+      *TITLE_OPTIONAL,
+      *DESCRIPTION,
+      {label: Cards, name: cards, widget: list, i18n: true, max: 4, fields: [
+        *ICON_SELECT,
+        *TITLE,
+        *DESCRIPTION,
+        *BUTTON
+      ]}
+    ]}
+  - &MODULES {name: modules, label: Modules, widget: list, i18n: true, types: [*TEXT_COLUMNS, *ANCHOR_CARDS]}
+  - &SINGLE_FIELDS [
+      *TITLE,
+      *DESCRIPTION,
+      *IMAGE_OBJECT,
+      *MODULES,
+      *VISIBLE_IN_CMS
+    ]
 
 collections:
   - name: posts
@@ -74,6 +102,16 @@ collections:
       {name: body, widget: markdown},
       *VISIBLE_IN_CMS,
     ]
+
+  - name: pages
+    label: Pages
+    label_singular: page
+    folder: content/collegium
+    create: true
+    i18n: true
+    slug: "{{slug}}"
+    filter: {field: visibleInCMS, value: true}
+    fields: *SINGLE_FIELDS
 
   - name: general
     label: General
@@ -112,8 +150,6 @@ collections:
           *HREF,
           {label: Logo, name: logo, widget: object, fields: *IMAGE_OBJECT_FIELDS},
         ]},
-        {label: Copyright, name: copyright, widget: string},
-        {label: Copyright Owner, name: copyrightOwner, widget: string},
       ]
 
     - label: Header
