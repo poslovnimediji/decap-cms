@@ -322,85 +322,227 @@ export const StyledBreadcrumbSeparator = styled.span`
   margin: 0 ${designTokens.spacing.xs};
 `;
 
-// Login prompt styles
-export const StyledLoginPrompt = styled.div`
+// FileGrid-specific item styles
+export const StyledFileGridItemContainer = styled.div<{
+  isSelected?: boolean;
+  isHovered?: boolean;
+}>`
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: ${designTokens.spacing.lg};
-  padding: ${designTokens.spacing.xxl};
-  text-align: center;
+  cursor: pointer;
+  border-width: 2px;
+  border-style: solid;
+  border-color: ${props => (props.isSelected ? designTokens.colors.primary : 'transparent')};
+  border-radius: ${designTokens.radius.md};
+  padding: ${designTokens.spacing.sm};
+  transition: all ${designTokens.transition};
+  background-color: ${props =>
+    props.isSelected
+      ? designTokens.colors.primaryLight
+      : props.isHovered
+      ? designTokens.colors.hover
+      : designTokens.colors.foreground};
+  position: relative;
 `;
 
-export const StyledLoginPromptTitle = styled.h2`
-  margin: 0;
-  font-size: ${designTokens.font.size.xl};
+export const StyledThumbnail = styled.div`
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background-color: ${designTokens.colors.background};
+  border-radius: ${designTokens.radius.sm};
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: ${designTokens.spacing.sm};
+`;
+
+export const StyledThumbnailImage = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+`;
+
+export const StyledCheckboxContainer = styled.div<{ visible?: boolean }>`
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background-color: ${designTokens.colors.foreground};
+  border-radius: ${designTokens.radius.sm};
+  padding: 2px;
+  opacity: ${props => (props.visible ? 1 : 0)};
+  transition: opacity ${designTokens.transition};
+`;
+
+export const StyledCheckboxInput = styled.input`
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+`;
+
+export const StyledDeleteButton = styled.button<{ visible?: boolean }>`
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: ${designTokens.radius.sm};
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: ${props => (props.visible ? 1 : 0)};
+  transition: opacity ${designTokens.transition};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  &:hover {
+    background-color: rgba(255, 0, 0, 0.1);
+  }
+`;
+
+export const StyledFileInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  color: ${designTokens.colors.textTertiary};
+  gap: 2px;
+`;
+
+export const StyledFileSize = styled.span`
+  font-weight: ${designTokens.font.weight.medium};
+`;
+
+export const StyledFileDate = styled.span`
+  color: #bbb;
+`;
+
+// Login prompt styles
+export const StyledLoginContainer = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: ${designTokens.spacing.xl};
+`;
+
+export const StyledLoginCard = styled.div`
+  text-align: center;
+  padding: 40px 60px;
+  background-color: ${designTokens.colors.foreground};
+  border-radius: ${designTokens.radius.lg};
+  box-shadow: ${designTokens.shadow.md};
+`;
+
+export const StyledLoginIcon = styled.div`
+  font-size: 48px;
+  margin-bottom: ${designTokens.spacing.xl};
+  color: ${designTokens.colors.primary};
+`;
+
+export const StyledLoginTitle = styled.h2`
+  margin: 0 0 ${designTokens.spacing.md} 0;
+  font-size: ${designTokens.font.size.xxl};
   font-weight: ${designTokens.font.weight.semibold};
   color: ${designTokens.colors.text};
 `;
 
-export const StyledLoginPromptMessage = styled.p`
-  margin: 0;
+export const StyledLoginDescription = styled.p`
+  margin: 0 0 30px 0;
   font-size: ${designTokens.font.size.base};
   color: ${designTokens.colors.textSecondary};
-  max-width: 400px;
+  line-height: 1.5;
 `;
 
 export const StyledLoginButton = styled(StyledButtonPrimary)`
-  margin-top: ${designTokens.spacing.md};
-  padding: ${designTokens.spacing.md} ${designTokens.spacing.xl};
+  padding: ${designTokens.spacing.md} ${designTokens.spacing.xxl};
+  font-size: ${designTokens.font.size.lg};
+  font-weight: ${designTokens.font.weight.semibold};
 `;
 
 // File upload styles
-export const StyledFileUpload = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${designTokens.spacing.md};
-  padding: ${designTokens.spacing.lg};
-  background: ${designTokens.colors.background};
-  border-radius: ${designTokens.radius.md};
+export const StyledFileUploadContainer = styled.div`
+  padding: ${designTokens.spacing.lg} ${designTokens.spacing.xxl} 0;
 `;
 
-export const StyledUploadArea = styled.div<{ isDragActive?: boolean }>`
-  border: 2px dashed
-    ${props => (props.isDragActive ? designTokens.colors.primary : designTokens.colors.border)};
+export const StyledDropZone = styled.div<{ isDragging?: boolean; isUploading?: boolean }>`
+  border-width: 2px;
+  border-style: dashed;
+  border-color: ${props =>
+    props.isDragging ? designTokens.colors.primary : designTokens.colors.border};
   border-radius: ${designTokens.radius.md};
-  padding: ${designTokens.spacing.xl};
+  padding: ${designTokens.spacing.xxl};
   text-align: center;
-  cursor: pointer;
+  cursor: ${props => (props.isUploading ? 'default' : 'pointer')};
   transition: all ${designTokens.transition};
   background-color: ${props =>
-    props.isDragActive ? designTokens.colors.primaryLight : 'transparent'};
+    props.isUploading
+      ? designTokens.colors.background
+      : props.isDragging
+      ? designTokens.colors.primaryLight
+      : '#fafafa'};
 
   &:hover {
-    border-color: ${designTokens.colors.primary};
-    background-color: ${designTokens.colors.primaryLight};
+    border-color: ${props =>
+      props.isUploading ? designTokens.colors.border : designTokens.colors.primary};
+    background-color: ${props =>
+      props.isUploading ? designTokens.colors.background : designTokens.colors.primaryLight};
   }
 `;
 
-export const StyledUploadText = styled.p`
-  margin: 0;
+export const StyledDropContent = styled.div`
+  pointer-events: none;
+`;
+
+export const StyledDropIcon = styled.div`
+  font-size: 32px;
+  margin-bottom: ${designTokens.spacing.sm};
+`;
+
+export const StyledDropText = styled.p`
+  margin: ${designTokens.spacing.sm} 0 ${designTokens.spacing.xs};
   font-size: ${designTokens.font.size.base};
-  color: ${designTokens.colors.textSecondary};
+  font-weight: ${designTokens.font.weight.medium};
+  color: ${designTokens.colors.text};
 `;
 
-export const StyledUploadInput = styled.input`
-  display: none;
+export const StyledDropSubtext = styled.p`
+  margin: 0;
+  font-size: ${designTokens.font.size.sm};
+  color: ${designTokens.colors.textTertiary};
 `;
 
-export const StyledProgressBar = styled.div`
+export const StyledUploadingContent = styled.div`
+  pointer-events: none;
+`;
+
+export const StyledProgressBarContainer = styled.div`
   width: 100%;
-  height: 4px;
-  background-color: ${designTokens.colors.border};
-  border-radius: 2px;
+  height: 6px;
+  background-color: ${designTokens.colors.secondary};
+  border-radius: 3px;
   overflow: hidden;
+  margin-bottom: ${designTokens.spacing.lg};
 `;
 
-export const StyledProgressFill = styled.div<{ progress: number }>`
+export const StyledProgressBarFill = styled.div<{ progress: number }>`
   height: 100%;
   background-color: ${designTokens.colors.primary};
+  transition: width 0.3s ease;
+  border-radius: 3px;
   width: ${props => props.progress}%;
-  transition: width ${designTokens.transition};
+`;
+
+export const StyledUploadingText = styled.p`
+  margin: 0;
+  font-size: ${designTokens.font.size.base};
+  font-weight: ${designTokens.font.weight.medium};
+  color: ${designTokens.colors.primary};
+`;
+
+export const StyledHiddenInput = styled.input`
+  display: none;
 `;

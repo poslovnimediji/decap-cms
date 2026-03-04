@@ -5,79 +5,19 @@
 
 import React, { useRef, useState } from 'react';
 
-const styles = {
-  uploadContainer: {
-    padding: '16px 24px 0',
-  },
-  dropZone: {
-    borderWidth: '2px',
-    borderStyle: 'dashed',
-    borderColor: '#ddd',
-    borderRadius: '6px',
-    padding: '24px',
-    textAlign: 'center' as const,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    backgroundColor: '#fafafa',
-  },
-  dropZoneHover: {
-    borderColor: '#0066cc',
-    backgroundColor: '#f5f9ff',
-  },
-  dropZoneDragging: {
-    borderColor: '#0066cc',
-    backgroundColor: '#e3f2fd',
-  },
-  dropZoneUploading: {
-    borderColor: '#ccc',
-    backgroundColor: '#f0f0f0',
-    cursor: 'default' as const,
-  },
-  dropContent: {
-    pointerEvents: 'none' as const,
-  },
-  dropIcon: {
-    fontSize: '32px',
-    marginBottom: '8px',
-  },
-  dropText: {
-    margin: '8px 0 4px',
-    fontSize: '14px',
-    fontWeight: 500 as const,
-    color: '#333',
-  },
-  dropSubtext: {
-    margin: 0,
-    fontSize: '12px',
-    color: '#999',
-  },
-  uploadingContent: {
-    pointerEvents: 'none' as const,
-  },
-  progressBar: {
-    width: '100%',
-    height: '6px',
-    backgroundColor: '#e0e0e0',
-    borderRadius: '3px',
-    overflow: 'hidden' as const,
-    marginBottom: '16px',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#0066cc',
-    transition: 'width 0.3s ease',
-    borderRadius: '3px',
-  },
-  uploadingText: {
-    margin: 0,
-    fontSize: '14px',
-    fontWeight: 500 as const,
-    color: '#0066cc',
-  },
-  hiddenInput: {
-    display: 'none' as const,
-  },
-};
+import {
+  StyledDropContent,
+  StyledDropIcon,
+  StyledDropSubtext,
+  StyledDropText,
+  StyledDropZone,
+  StyledFileUploadContainer,
+  StyledHiddenInput,
+  StyledProgressBarContainer,
+  StyledProgressBarFill,
+  StyledUploadingContent,
+  StyledUploadingText,
+} from './styles';
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void;
@@ -94,7 +34,6 @@ export function FileUpload({
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isHovering, setIsHovering] = useState(false);
 
   function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -141,60 +80,41 @@ export function FileUpload({
     }
   }
 
-  function getDropZoneStyle() {
-    let style = { ...styles.dropZone };
-    if (isUploading) {
-      style = { ...style, ...styles.dropZoneUploading };
-    } else if (isDragging) {
-      style = { ...style, ...styles.dropZoneDragging };
-    } else if (isHovering) {
-      style = { ...style, ...styles.dropZoneHover };
-    }
-    return style;
-  }
-
   return (
-    <div style={styles.uploadContainer}>
-      <div
-        style={getDropZoneStyle()}
+    <StyledFileUploadContainer>
+      <StyledDropZone
+        isDragging={isDragging}
+        isUploading={isUploading}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={handleClick}
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
       >
-        <input
+        <StyledHiddenInput
           ref={fileInputRef}
           type="file"
           multiple
           onChange={handleFileInputChange}
-          style={styles.hiddenInput}
           disabled={isUploading}
         />
 
         {isUploading ? (
-          <div style={styles.uploadingContent}>
-            <div style={styles.progressBar}>
-              <div
-                style={{
-                  ...styles.progressFill,
-                  width: `${uploadProgress}%`,
-                }}
-              />
-            </div>
-            <p style={styles.uploadingText}>Uploading... {uploadProgress}%</p>
-          </div>
+          <StyledUploadingContent>
+            <StyledProgressBarContainer>
+              <StyledProgressBarFill progress={uploadProgress} />
+            </StyledProgressBarContainer>
+            <StyledUploadingText>Uploading... {uploadProgress}%</StyledUploadingText>
+          </StyledUploadingContent>
         ) : (
-          <div style={styles.dropContent}>
-            <div style={styles.dropIcon}>📤</div>
-            <p style={styles.dropText}>Drag files here or click to upload</p>
-            <p style={styles.dropSubtext}>Uploading to: {currentPath}</p>
-          </div>
+          <StyledDropContent>
+            <StyledDropIcon>📤</StyledDropIcon>
+            <StyledDropText>Drag files here or click to upload</StyledDropText>
+            <StyledDropSubtext>Uploading to: {currentPath}</StyledDropSubtext>
+          </StyledDropContent>
         )}
-      </div>
-    </div>
+      </StyledDropZone>
+    </StyledFileUploadContainer>
   );
 }
 

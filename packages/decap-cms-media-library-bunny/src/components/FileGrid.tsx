@@ -5,123 +5,22 @@
 
 import React, { useMemo } from 'react';
 
-import type { AddressedMediaFile } from '../types';
+import {
+  StyledCheckboxContainer,
+  StyledCheckboxInput,
+  StyledDeleteButton,
+  StyledFileDate,
+  StyledFileGrid,
+  StyledFileGridItemContainer,
+  StyledFileIcon,
+  StyledFileInfo,
+  StyledFileName,
+  StyledFileSize,
+  StyledThumbnail,
+  StyledThumbnailImage,
+} from './styles';
 
-const styles = {
-  grid: {
-    display: 'grid' as const,
-    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-    gap: '16px',
-    width: '100%',
-  },
-  item: {
-    display: 'flex' as const,
-    flexDirection: 'column' as const,
-    cursor: 'pointer',
-    borderWidth: '2px',
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    borderRadius: '6px',
-    padding: '8px',
-    transition: 'all 0.2s',
-    backgroundColor: 'white',
-    position: 'relative' as const,
-  },
-  itemHover: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#ddd',
-  },
-  itemSelected: {
-    backgroundColor: '#e3f2fd',
-    borderColor: '#0066cc',
-  },
-  thumbnail: {
-    position: 'relative' as const,
-    width: '100%',
-    aspectRatio: '1',
-    backgroundColor: '#f0f0f0',
-    borderRadius: '4px',
-    overflow: 'hidden' as const,
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginBottom: '8px',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover' as const,
-  },
-  folderIcon: {
-    fontSize: '48px',
-    color: '#999',
-  },
-  fileIcon: {
-    fontSize: '48px',
-    color: '#999',
-  },
-  checkbox: {
-    position: 'absolute' as const,
-    top: '4px',
-    left: '4px',
-    backgroundColor: 'white',
-    borderRadius: '3px',
-    padding: '2px',
-    opacity: 0,
-    transition: 'opacity 0.2s',
-  },
-  checkboxVisible: {
-    opacity: 1,
-  },
-  checkboxInput: {
-    cursor: 'pointer',
-    width: '18px',
-    height: '18px',
-  },
-  deleteButton: {
-    position: 'absolute' as const,
-    top: '4px',
-    right: '4px',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    border: 'none',
-    borderRadius: '3px',
-    width: '28px',
-    height: '28px',
-    fontSize: '16px',
-    cursor: 'pointer',
-    opacity: 0,
-    transition: 'opacity 0.2s',
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    padding: 0,
-  },
-  deleteButtonVisible: {
-    opacity: 1,
-  },
-  name: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: '#333',
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    marginBottom: '4px',
-  },
-  info: {
-    display: 'flex' as const,
-    flexDirection: 'column' as const,
-    fontSize: '11px',
-    color: '#999',
-    gap: '2px',
-  },
-  size: {
-    fontWeight: 500,
-  },
-  date: {
-    color: '#bbb',
-  },
-};
+import type { AddressedMediaFile } from '../types';
 
 interface FileGridProps {
   files: AddressedMediaFile[];
@@ -132,7 +31,6 @@ interface FileGridProps {
   allowMultiple?: boolean;
 }
 
-// Image extensions for preview
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'bmp'];
 
 export function FileGrid({
@@ -155,7 +53,6 @@ export function FileGrid({
   }
 
   const sortedFiles = useMemo(() => {
-    // Directories first, then files, sorted alphabetically
     return [...files].sort((a, b) => {
       if (a.IsDirectory !== b.IsDirectory) {
         return a.IsDirectory ? -1 : 1;
@@ -165,7 +62,7 @@ export function FileGrid({
   }, [files]);
 
   return (
-    <div style={styles.grid}>
+    <StyledFileGrid>
       {sortedFiles.map(file => {
         const isSelected = selectedFiles.has(file.publicUrl);
         const isImage = !file.IsDirectory && isImageFile(file.ObjectName);
@@ -173,13 +70,10 @@ export function FileGrid({
         const isHovered = hoveredItem === itemKey;
 
         return (
-          <div
+          <StyledFileGridItemContainer
             key={itemKey}
-            style={{
-              ...styles.item,
-              ...(isHovered ? styles.itemHover : {}),
-              ...(isSelected ? styles.itemSelected : {}),
-            }}
+            isSelected={isSelected}
+            isHovered={isHovered}
             onDoubleClick={() => onDoubleClick(file)}
             onClick={() => {
               if (!file.IsDirectory) {
@@ -189,77 +83,50 @@ export function FileGrid({
             onMouseEnter={() => setHoveredItem(itemKey)}
             onMouseLeave={() => setHoveredItem(null)}
           >
-            {/* Thumbnail */}
-            <div style={styles.thumbnail}>
+            <StyledThumbnail>
               {file.IsDirectory ? (
-                <div style={styles.folderIcon}>📁</div>
+                <StyledFileIcon>📁</StyledFileIcon>
               ) : isImage ? (
-                <img
-                  src={file.publicUrl}
-                  alt={file.ObjectName}
-                  style={styles.image}
-                  loading="lazy"
-                />
+                <StyledThumbnailImage src={file.publicUrl} alt={file.ObjectName} loading="lazy" />
               ) : (
-                <div style={styles.fileIcon}>📄</div>
+                <StyledFileIcon>📄</StyledFileIcon>
               )}
 
-              {/* Selection Checkbox */}
               {!file.IsDirectory && (
-                <div
-                  style={{
-                    ...styles.checkbox,
-                    ...(isHovered || isSelected ? styles.checkboxVisible : {}),
-                  }}
-                >
-                  <input
+                <StyledCheckboxContainer visible={isHovered || isSelected}>
+                  <StyledCheckboxInput
                     type={allowMultiple ? 'checkbox' : 'radio'}
                     checked={isSelected}
                     onChange={() => onSelectFile(file.publicUrl)}
                     onClick={e => e.stopPropagation()}
-                    style={styles.checkboxInput}
                   />
-                </div>
+                </StyledCheckboxContainer>
               )}
 
-              {/* Delete Button */}
               {!file.IsDirectory && (
-                <button
-                  style={{
-                    ...styles.deleteButton,
-                    ...(isHovered ? styles.deleteButtonVisible : {}),
-                  }}
+                <StyledDeleteButton
+                  visible={isHovered}
                   onClick={e => {
                     e.stopPropagation();
                     onDelete(`${file.Path}${file.ObjectName}`);
                   }}
                   title="Delete file"
-                  onMouseEnter={e =>
-                    (e.currentTarget.style.backgroundColor = 'rgba(255, 0, 0, 0.1)')
-                  }
-                  onMouseLeave={e =>
-                    (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)')
-                  }
                 >
                   🗑️
-                </button>
+                </StyledDeleteButton>
               )}
-            </div>
+            </StyledThumbnail>
 
-            {/* File Name */}
-            <div style={styles.name} title={file.ObjectName}>
-              {file.ObjectName}
-            </div>
+            <StyledFileName title={file.ObjectName}>{file.ObjectName}</StyledFileName>
 
-            {/* File Info */}
-            <div style={styles.info}>
-              {!file.IsDirectory && <span style={styles.size}>{formatFileSize(file.Length)}</span>}
-              <span style={styles.date}>{formatDate(file.LastChanged)}</span>
-            </div>
-          </div>
+            <StyledFileInfo>
+              {!file.IsDirectory && <StyledFileSize>{formatFileSize(file.Length)}</StyledFileSize>}
+              <StyledFileDate>{formatDate(file.LastChanged)}</StyledFileDate>
+            </StyledFileInfo>
+          </StyledFileGridItemContainer>
         );
       })}
-    </div>
+    </StyledFileGrid>
   );
 }
 

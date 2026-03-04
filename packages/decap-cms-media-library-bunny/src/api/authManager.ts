@@ -9,79 +9,57 @@ const STORAGE_ZONE_NAME_KEY = 'bunny_storage_zone_name';
 const RETURN_URL_KEY = 'bunny_return_url';
 const AUTO_OPEN_FLAG_KEY = 'bunny_auto_open';
 
+// Helper functions for safe localStorage access
+function safeGetItem(key: string, errorMsg: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.error(errorMsg, e);
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string, errorMsg: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.error(errorMsg, e);
+  }
+}
+
+function safeRemoveItem(key: string, errorMsg: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.error(errorMsg, e);
+  }
+}
+
 export class BunnyAuthManager {
-  /**
-   * Get stored API key (storage zone password) from localStorage
-   */
   static getStoredApiKey(): string | null {
-    try {
-      return localStorage.getItem(STORAGE_API_KEY);
-    } catch (e) {
-      console.error('Failed to retrieve stored API key:', e);
-      return null;
-    }
+    return safeGetItem(STORAGE_API_KEY, 'Failed to retrieve stored API key:');
   }
 
-  /**
-   * Set (store) Storage Zone Password (for Storage API) in localStorage
-   */
   static setStoredApiKey(apiKey: string): void {
-    try {
-      localStorage.setItem(STORAGE_API_KEY, apiKey);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to store Storage Zone Password:', e);
-    }
+    safeSetItem(STORAGE_API_KEY, apiKey, '[Bunny Auth] Failed to store Storage Zone Password:');
   }
 
-  /**
-   * Get stored Account API Key from localStorage
-   */
   static getStoredAccountApiKey(): string | null {
-    try {
-      return localStorage.getItem(ACCOUNT_API_KEY);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to retrieve Account API Key:', e);
-      return null;
-    }
+    return safeGetItem(ACCOUNT_API_KEY, '[Bunny Auth] Failed to retrieve Account API Key:');
   }
 
-  /**
-   * Set (store) Account API Key (from OAuth) in localStorage
-   */
   static setStoredAccountApiKey(apiKey: string): void {
-    try {
-      localStorage.setItem(ACCOUNT_API_KEY, apiKey);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to store Account API Key:', e);
-    }
+    safeSetItem(ACCOUNT_API_KEY, apiKey, '[Bunny Auth] Failed to store Account API Key:');
   }
 
-  /**
-   * Get stored storage zone name from localStorage
-   */
   static getStoredStorageZoneName(): string | null {
-    try {
-      return localStorage.getItem(STORAGE_ZONE_NAME_KEY);
-    } catch (e) {
-      console.error('Failed to retrieve storage zone name:', e);
-      return null;
-    }
+    return safeGetItem(STORAGE_ZONE_NAME_KEY, 'Failed to retrieve storage zone name:');
   }
 
-  /**
-   * Set (store) storage zone name in localStorage
-   */
   static setStoredStorageZoneName(zoneName: string): void {
-    try {
-      localStorage.setItem(STORAGE_ZONE_NAME_KEY, zoneName);
-    } catch (e) {
-      console.error('Failed to store storage zone name:', e);
-    }
+    safeSetItem(STORAGE_ZONE_NAME_KEY, zoneName, 'Failed to store storage zone name:');
   }
 
-  /**
-   * Clear stored credentials from localStorage
-   */
   static clearStoredApiKey(): void {
     try {
       localStorage.removeItem(STORAGE_API_KEY);
@@ -92,199 +70,136 @@ export class BunnyAuthManager {
     }
   }
 
-  /**
-   * Save the current page URL before redirecting to authentication
-   * This allows us to return to the exact page after login
-   */
   static saveReturnUrl(url: string = window.location.href): void {
-    try {
-      const sanitizedUrl = this.sanitizeReturnUrl(url);
-      localStorage.setItem(RETURN_URL_KEY, sanitizedUrl);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to save return URL:', e);
-    }
+    const sanitizedUrl = this.sanitizeReturnUrl(url);
+    safeSetItem(RETURN_URL_KEY, sanitizedUrl, '[Bunny Auth] Failed to save return URL:');
   }
 
-  /**
-   * Get the saved return URL
-   */
   static getReturnUrl(): string | null {
-    try {
-      return localStorage.getItem(RETURN_URL_KEY);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to retrieve return URL:', e);
-      return null;
-    }
+    return safeGetItem(RETURN_URL_KEY, '[Bunny Auth] Failed to retrieve return URL:');
   }
 
-  /**
-   * Clear the saved return URL
-   */
   static clearReturnUrl(): void {
-    try {
-      localStorage.removeItem(RETURN_URL_KEY);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to clear return URL:', e);
-    }
+    safeRemoveItem(RETURN_URL_KEY, '[Bunny Auth] Failed to clear return URL:');
   }
 
-  /**
-   * Set flag to auto-open media library after authentication
-   */
   static setAutoOpenFlag(): void {
-    try {
-      localStorage.setItem(AUTO_OPEN_FLAG_KEY, 'true');
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to set auto-open flag:', e);
-    }
+    safeSetItem(AUTO_OPEN_FLAG_KEY, 'true', '[Bunny Auth] Failed to set auto-open flag:');
   }
 
-  /**
-   * Check if media library should auto-open after auth
-   */
   static shouldAutoOpen(): boolean {
-    try {
-      return localStorage.getItem(AUTO_OPEN_FLAG_KEY) === 'true';
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to check auto-open flag:', e);
-      return false;
-    }
+    return (
+      safeGetItem(AUTO_OPEN_FLAG_KEY, '[Bunny Auth] Failed to check auto-open flag:') === 'true'
+    );
   }
 
-  /**
-   * Clear auto-open flag
-   */
   static clearAutoOpenFlag(): void {
-    try {
-      localStorage.removeItem(AUTO_OPEN_FLAG_KEY);
-    } catch (e) {
-      console.error('[Bunny Auth] Failed to clear auto-open flag:', e);
+    safeRemoveItem(AUTO_OPEN_FLAG_KEY, '[Bunny Auth] Failed to clear auto-open flag:');
+  }
+
+  // Auth parameter names to check in URLs
+  private static AUTH_PARAM_NAMES = [
+    'accessKey',
+    'apiKey',
+    'api_key',
+    'password',
+    'token',
+    'storageName',
+    'storage_name',
+    'storageZoneName',
+    'storage_zone_name',
+    'zoneName',
+    'zone_name',
+  ];
+
+  // Helper to parse URL parameters from search and hash
+  private static parseUrlParams(url: URL = new URL(window.location.href)) {
+    const searchParams = new URLSearchParams(url.search);
+    const hashContent = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+    const hashQueryIndex = hashContent.indexOf('?');
+    const hashRoute = hashQueryIndex >= 0 ? hashContent.slice(0, hashQueryIndex) : hashContent;
+    const hashQueryParams =
+      hashQueryIndex >= 0
+        ? new URLSearchParams(hashContent.slice(hashQueryIndex + 1))
+        : hashContent.includes('=')
+        ? new URLSearchParams(hashContent)
+        : new URLSearchParams();
+
+    return { searchParams, hashRoute, hashQueryParams };
+  }
+
+  // Helper to get param value from multiple sources
+  private static getParamValue(
+    paramNames: string[],
+    searchParams: URLSearchParams,
+    hashQueryParams: URLSearchParams,
+  ): string | null {
+    for (const name of paramNames) {
+      const value = searchParams.get(name) || hashQueryParams.get(name);
+      if (value) return value;
     }
+    return null;
+  }
+
+  // Helper to remove auth parameters from URLSearchParams
+  private static removeAuthParams(params: URLSearchParams): boolean {
+    let removed = false;
+    this.AUTH_PARAM_NAMES.forEach(param => {
+      if (params.has(param)) {
+        params.delete(param);
+        removed = true;
+      }
+    });
+    return removed;
+  }
+
+  // Helper to rebuild URL from components
+  private static rebuildUrl(
+    pathname: string,
+    searchParams: URLSearchParams,
+    hashRoute: string,
+    hashQueryParams: URLSearchParams,
+  ): string {
+    const searchQuery = searchParams.toString();
+    const hashQuery = hashQueryParams.toString();
+    const hashPrefix = hashRoute ? `#${hashRoute}` : hashQuery ? '#' : '';
+    const hashSuffix = hashQuery ? `${hashRoute ? '?' : ''}${hashQuery}` : '';
+    return `${pathname}${searchQuery ? `?${searchQuery}` : ''}${hashPrefix}${hashSuffix}`;
   }
 
   /**
    * Generate the Bunny authentication URL
-   * Redirects back to CMS root after authentication
    */
   static generateAuthUrl(): string {
     const currentDomain = window.location.origin;
-    // Callback URL is the CMS root - Bunny will redirect there with API key in params
     const callbackUrl = currentDomain;
-
     const authUrl = 'https://dash.bunny.net/auth/login';
     const params = new URLSearchParams({
       source: 'decap',
       domain: currentDomain,
       callbackUrl,
     });
-
     return `${authUrl}?${params.toString()}`;
   }
 
-  /**
-   * Resolve return URL from stored value
-   */
   static resolveReturnUrl(): string | null {
     return this.getReturnUrl();
   }
 
-  /**
-   * Redirect to Bunny authentication in the same window
-   */
   static redirectToAuth(): void {
-    // Save current location before redirecting
     this.saveReturnUrl();
-    // Set flag to auto-open media library after auth
     this.setAutoOpenFlag();
-    const authUrl = this.generateAuthUrl();
-    window.location.href = authUrl;
+    window.location.href = this.generateAuthUrl();
   }
 
   /**
    * Extract Account API key and storage zone name from URL parameters
-   * Bunny OAuth returns the Account API Key (not Storage Zone Password)
-   * We'll use this Account API Key to fetch the actual Storage Zone Password
    */
   static extractCredentialsFromUrl(): { apiKey: string | null; storageName: string | null } {
-    const searchParams = new URLSearchParams(window.location.search);
-    const hashContent = window.location.hash.startsWith('#')
-      ? window.location.hash.slice(1)
-      : window.location.hash;
-    const hashQueryIndex = hashContent.indexOf('?');
-    const hashParams = new URLSearchParams(hashContent);
-    const hashQueryParams =
-      hashQueryIndex >= 0 ? new URLSearchParams(hashContent.slice(hashQueryIndex + 1)) : null;
+    const { searchParams, hashQueryParams } = this.parseUrlParams();
 
-    // Try multiple parameter names for API key
-    const apiKey =
-      searchParams.get('accessKey') ||
-      searchParams.get('apiKey') ||
-      searchParams.get('api_key') ||
-      searchParams.get('password') ||
-      searchParams.get('token') ||
-      hashParams.get('accessKey') ||
-      hashParams.get('apiKey') ||
-      hashParams.get('api_key') ||
-      hashParams.get('password') ||
-      hashParams.get('token') ||
-      hashQueryParams?.get('accessKey') ||
-      hashQueryParams?.get('apiKey') ||
-      hashQueryParams?.get('api_key') ||
-      hashQueryParams?.get('password') ||
-      hashQueryParams?.get('token') ||
-      null;
-
-    // Try multiple parameter names for storage zone name
-    const storageName =
-      searchParams.get('storageName') ||
-      searchParams.get('storage_name') ||
-      searchParams.get('storageZoneName') ||
-      searchParams.get('storage_zone_name') ||
-      searchParams.get('zoneName') ||
-      searchParams.get('zone_name') ||
-      hashParams.get('storageName') ||
-      hashParams.get('storage_name') ||
-      hashParams.get('storageZoneName') ||
-      hashParams.get('storage_zone_name') ||
-      hashParams.get('zoneName') ||
-      hashParams.get('zone_name') ||
-      hashQueryParams?.get('storageName') ||
-      hashQueryParams?.get('storage_name') ||
-      hashQueryParams?.get('storageZoneName') ||
-      hashQueryParams?.get('storage_zone_name') ||
-      hashQueryParams?.get('zoneName') ||
-      hashQueryParams?.get('zone_name') ||
-      null;
-
-    if (apiKey || storageName) {
-      // Credentials found in URL
-    }
-
-    return { apiKey, storageName };
-  }
-
-  /**
-   * Clean URL by removing auth parameters
-   */
-  static cleanAuthParamsFromUrl(): void {
-    const searchParams = new URLSearchParams(window.location.search);
-    const hashContent = window.location.hash.startsWith('#')
-      ? window.location.hash.slice(1)
-      : window.location.hash;
-    const hashQueryIndex = hashContent.indexOf('?');
-    const hasHashQuery = hashQueryIndex >= 0;
-    const hashRoute = hasHashQuery ? hashContent.slice(0, hashQueryIndex) : hashContent;
-    const hashQueryParams = hasHashQuery
-      ? new URLSearchParams(hashContent.slice(hashQueryIndex + 1))
-      : hashContent.includes('=')
-      ? new URLSearchParams(hashContent)
-      : new URLSearchParams();
-    const authParamNames = [
-      'accessKey',
-      'apiKey',
-      'api_key',
-      'password',
-      'token',
+    const apiKeyNames = ['accessKey', 'apiKey', 'api_key', 'password', 'token'];
+    const storageNames = [
       'storageName',
       'storage_name',
       'storageZoneName',
@@ -292,27 +207,29 @@ export class BunnyAuthManager {
       'zoneName',
       'zone_name',
     ];
-    let hasAuthParams = false;
 
-    authParamNames.forEach(param => {
-      if (searchParams.has(param)) {
-        searchParams.delete(param);
-        hasAuthParams = true;
-      }
-      if (hashQueryParams.has(param)) {
-        hashQueryParams.delete(param);
-        hasAuthParams = true;
-      }
-    });
+    return {
+      apiKey: this.getParamValue(apiKeyNames, searchParams, hashQueryParams),
+      storageName: this.getParamValue(storageNames, searchParams, hashQueryParams),
+    };
+  }
 
-    if (hasAuthParams) {
-      const searchQuery = searchParams.toString();
-      const hashQuery = hashQueryParams.toString();
-      const hashPrefix = hashRoute ? `#${hashRoute}` : hashQuery ? '#' : '';
-      const hashSuffix = hashQuery ? `${hashRoute ? '?' : ''}${hashQuery}` : '';
-      const newUrl = `${window.location.pathname}${
-        searchQuery ? `?${searchQuery}` : ''
-      }${hashPrefix}${hashSuffix}`;
+  /**
+   * Clean URL by removing auth parameters
+   */
+  static cleanAuthParamsFromUrl(): void {
+    const { searchParams, hashRoute, hashQueryParams } = this.parseUrlParams();
+
+    const searchRemoved = this.removeAuthParams(searchParams);
+    const hashRemoved = this.removeAuthParams(hashQueryParams);
+
+    if (searchRemoved || hashRemoved) {
+      const newUrl = this.rebuildUrl(
+        window.location.pathname,
+        searchParams,
+        hashRoute,
+        hashQueryParams,
+      );
       window.history.replaceState({}, '', newUrl);
     }
   }
@@ -323,48 +240,12 @@ export class BunnyAuthManager {
   static sanitizeReturnUrl(url: string): string {
     try {
       const parsedUrl = new URL(url, window.location.origin);
-      const searchParams = new URLSearchParams(parsedUrl.search);
-      const hashContent = parsedUrl.hash.startsWith('#') ? parsedUrl.hash.slice(1) : parsedUrl.hash;
-      const hashQueryIndex = hashContent.indexOf('?');
-      const hashRoute = hashQueryIndex >= 0 ? hashContent.slice(0, hashQueryIndex) : hashContent;
-      const hashQueryParams =
-        hashQueryIndex >= 0
-          ? new URLSearchParams(hashContent.slice(hashQueryIndex + 1))
-          : hashContent.includes('=')
-          ? new URLSearchParams(hashContent)
-          : new URLSearchParams();
+      const { searchParams, hashRoute, hashQueryParams } = this.parseUrlParams(parsedUrl);
 
-      const authParamNames = [
-        'accessKey',
-        'apiKey',
-        'api_key',
-        'password',
-        'token',
-        'storageName',
-        'storage_name',
-        'storageZoneName',
-        'storage_zone_name',
-        'zoneName',
-        'zone_name',
-      ];
+      this.removeAuthParams(searchParams);
+      this.removeAuthParams(hashQueryParams);
 
-      authParamNames.forEach(param => {
-        if (searchParams.has(param)) {
-          searchParams.delete(param);
-        }
-        if (hashQueryParams.has(param)) {
-          hashQueryParams.delete(param);
-        }
-      });
-
-      const searchQuery = searchParams.toString();
-      const hashQuery = hashQueryParams.toString();
-      const hashPrefix = hashRoute ? `#${hashRoute}` : hashQuery ? '#' : '';
-      const hashSuffix = hashQuery ? `${hashRoute ? '?' : ''}${hashQuery}` : '';
-
-      return `${parsedUrl.pathname}${
-        searchQuery ? `?${searchQuery}` : ''
-      }${hashPrefix}${hashSuffix}`;
+      return this.rebuildUrl(parsedUrl.pathname, searchParams, hashRoute, hashQueryParams);
     } catch (e) {
       console.warn('[Bunny Auth] Failed to sanitize return URL, using raw value');
       return url;
@@ -372,12 +253,9 @@ export class BunnyAuthManager {
   }
 
   /**
-   * Check if fully authenticated (both API key and storage zone name)
+   * Check if fully authenticated
    */
   static isAuthenticated(): boolean {
-    const hasKey = !!this.getStoredApiKey();
-    const hasZoneName = !!this.getStoredStorageZoneName();
-    const isAuth = hasKey && hasZoneName;
-    return isAuth;
+    return !!(this.getStoredApiKey() && this.getStoredStorageZoneName());
   }
 }
