@@ -158,7 +158,7 @@ export class BunnyAuthManager {
   static generateAuthUrl(): string {
     const currentDomain = window.location.origin;
     // TODO: Once Bunny fixes callbackUrl support, use: currentDomain + window.location.pathname
-    const callbackUrl = currentDomain;
+    const callbackUrl = currentDomain + window.location.pathname;
     const authUrl = 'https://dash.bunny.net/auth/login';
     const params = new URLSearchParams({
       source: 'decap',
