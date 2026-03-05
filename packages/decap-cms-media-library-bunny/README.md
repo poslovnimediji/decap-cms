@@ -90,6 +90,7 @@ collections:
 
 ## Limitations (MVP Version)
 
+- **OAuth subdirectory limitation**: Authentication currently only works for CMS deployed at domain root. For subdirectory deployments (e.g., `example.com/admin/`), users must manually navigate to the subdirectory after authentication. This is a Bunny.net OAuth limitation that has been reported to their team.
 - No search functionality (coming in future versions)
 - No pagination (suitable for small-to-medium numbers of files)
 - Client-side only image filtering (no server-side optimization)
