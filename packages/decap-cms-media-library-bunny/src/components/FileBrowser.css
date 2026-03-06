@@ -1,0 +1,109 @@
+/* File Browser Navigation Stylesheet */
+
+.browser {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f9f9f9;
+}
+
+/* Navigation Controls */
+.controls {
+  margin-bottom: 12px;
+}
+
+.backButton {
+  padding: 6px 12px;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backButton:hover:not(:disabled) {
+  background-color: #e0e0e0;
+  border-color: #999;
+}
+
+.backButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Breadcrumbs */
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.breadcrumb {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.2s;
+  border-radius: 3px;
+}
+
+.breadcrumb:hover {
+  background-color: rgba(0, 102, 204, 0.1);
+  text-decoration: underline;
+}
+
+.breadcrumb.active {
+  color: #333;
+  font-weight: 600;
+  background-color: rgba(0, 102, 204, 0.05);
+  cursor: default;
+}
+
+.separator {
+  color: #999;
+  margin: 0 2px;
+  font-size: 12px;
+  user-select: none;
+}
+
+/* Path Display */
+.pathDisplay {
+  font-size: 11px;
+  color: #999;
+  font-family: 'Monaco', 'Courier New', monospace;
+  background-color: white;
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid #eee;
+  word-break: break-all;
+  max-height: 40px;
+  overflow-y: auto;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .browser {
+    padding: 12px 16px;
+  }
+
+  .breadcrumbs {
+    margin-bottom: 6px;
+  }
+
+  .breadcrumb {
+    font-size: 12px;
+    padding: 3px 6px;
+  }
+
+  .pathDisplay {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}
