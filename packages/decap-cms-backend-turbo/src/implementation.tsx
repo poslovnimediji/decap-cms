@@ -1,9 +1,11 @@
 import { GitHubBackend } from 'decap-cms-backend-github';
 import { type Config, type User, type Credentials, filterByExtension } from 'decap-cms-lib-util';
-import { SupabaseClient } from './supabase';
-import type { GitHubUser } from 'decap-cms-backend-github/src/implementation';
-import SupabaseAuthenticationPage from './AuthenticationPage';
 import React from 'react';
+
+import { SupabaseClient } from './supabase';
+import SupabaseAuthenticationPage from './AuthenticationPage';
+
+import type { GitHubUser } from 'decap-cms-backend-github/src/implementation';
 
 interface SupabaseUser extends User {
   access_token?: string;
@@ -17,6 +19,7 @@ export default class DecapTurboBackend extends GitHubBackend {
   supabaseExpiresAt: number | null = null;
   supabaseAnonKey: string;
   supabaseId: string;
+  siteId: string;
   updateUserCredentials: (credentials: Credentials) => void;
   refreshedTokenPromise?: Promise<string>;
 
@@ -26,6 +29,7 @@ export default class DecapTurboBackend extends GitHubBackend {
     super(config, options);
     this.supabaseAnonKey = (config.backend.anon_key || config.backend.app_id || '') as string;
     this.supabaseId = (config.backend.app_id || '') as string;
+    this.siteId = (config.backend.site_id || '') as string;
 
     this.updateUserCredentials = options.updateUserCredentials || (() => {});
 
@@ -37,6 +41,7 @@ export default class DecapTurboBackend extends GitHubBackend {
       this.supabaseAnonKey,
       this.branch,
       this.originRepo,
+      this.siteId,
     );
   }
 
@@ -186,7 +191,7 @@ export default class DecapTurboBackend extends GitHubBackend {
           name: owner,
           login: owner,
           avatar_url: `https://github.com/${owner}.png`,
-          token: token,
+          token,
           access_token: this.supabaseAccessToken || undefined,
           refresh_token: this.supabaseRefreshToken || undefined,
           expires_at: this.supabaseExpiresAt || undefined,

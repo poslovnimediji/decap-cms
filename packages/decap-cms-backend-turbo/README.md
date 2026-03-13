@@ -1,91 +1,89 @@
-# GitHub Backend with Supabase Proxy
+# Decap CMS — Turbo Backend
 
-This package extends the Decap CMS GitHub backend with a Supabase-backed cache layer for entry discovery and search.
+**This backend is under active development.**
 
-## Status
-
-This backend is under active development.
+This package replaces the standard GitHub OAuth flow with Supabase email/password authentication, and adds a Supabase-backed cache that makes large-collection entry loading significantly faster.
 
 ## Architecture
 
-At a high level, the backend works in two layers:
+The backend is built in two layers.
 
-1. It still uses the regular GitHub backend for repository access, authentication, listing files, and reading file contents/metadata.
-2. It mirrors entry data into a Supabase table and reads from that table for folder entry retrieval and search.
+### 1. Auth layer (`implementation.tsx`)
 
-The current flow for folder collections is:
+Users sign in with their email and password via a custom login page. Authentication is handled entirely by Supabase Auth — no GitHub OAuth app or personal access token is required from the user. After login, the Supabase JWT is used as a Bearer token for all GitHub API calls, which are proxied through Supabase.
 
-1. List files from GitHub.
-2. Compare the GitHub file list with the cached rows in Supabase.
-3. Remove stale rows and insert missing rows into Supabase.
-4. Read entries back from Supabase, filtered by repository, branch, collection, and `site_id`.
+The implementation also handles token refresh automatically: if the Supabase JWT is close to expiry it is silently refreshed in the background, and the updated tokens are persisted back to the Decap CMS auth store.
 
-Each cached row is scoped by these fields:
+### 2. DB cache layer (`supabase.ts`)
 
-- `repo`
-- `site_id`
-- `branch`
-- `collection`
-- `file_id`
+For folder collections, entry data is mirrored into a Supabase table. The flow on every collection load is:
 
-`site_id` is used to separate rows that belong to different sites sharing the same Supabase project or table.
+1. Fetch the file list from GitHub.
+2. Diff it against the cached rows in Supabase.
+3. Remove stale rows; insert any missing rows in batches.
+4. Return entries from Supabase, filtered by `repo`, `site_id`, `branch`, and `collection`.
+
+Each cached row is keyed by:
+
+| column | description |
+|---|---|
+| `repo` | GitHub repository (`owner/repo`) |
+| `site_id` | identifies which site owns the row when multiple sites share one Supabase project |
+| `branch` | Git branch |
+| `collection` | folder + extension + depth fingerprint |
+| `file_id` | Git blob SHA |
 
 ## Decap CMS config
 
 ```yaml
 backend:
-  name: supabase-github-proxy
+  name: decap-turbo
   repo: owner/repo
   branch: main
 
-  # Supabase project reference used to build:
-  # https://<app_id>.supabase.co/rest/v1/data
-  app_id: your-supabase-project-ref
+  # Full Supabase project URL — used by the auth page and token refresh.
+  base_url: https://your-project-ref.supabase.co
+  api_root: https://your-project-ref.supabase.co/functions/v1/gh
+  auth_endpoint: auth/v1/authorize
+  auth_token_endpoint: auth/v1/token
 
-  # Supabase REST API key used for requests.
-  # anon_key is preferred.
+  # Supabase project ref — used to build the PostgREST endpoint for the cache.
+  app_id: your-project-ref
+
+  # Supabase anon key — used for both auth API calls and cache queries.
   anon_key: your-supabase-anon-key
 
-  # Required for cache partitioning between sites.
+  # Stable identifier for this site.
   site_id: your-site-id
 ```
 
-Notes:
-
-- `site_id` is the identifier written into the `site_id` column in Supabase and should be stable per site.
-- `app_id` is currently still used to derive the Supabase project URL.
-- `anon_key` is used for authentication with the Supabase REST API.
-
 ## Supabase setup
 
-This backend expects a Supabase table exposed through PostgREST at:
+### Auth
 
-```text
-https://<app_id>.supabase.co/rest/v1/data
-```
+Enable the **Email** provider in your Supabase project under Authentication → Providers. Create an account for each CMS user.
 
-Create a table named `data` with columns compatible with the payload written by the backend:
+### Cache table
 
-- `repo` text not null
-- `site_id` text not null
-- `branch` text not null
-- `collection` text not null
-- `file_id` text not null
-- `file_path` text not null
-- `file_meta` jsonb not null
-- `file_data` text
-
-Create a unique constraint covering the row identity used by upserts:
+Create a table named `data` in the `public` schema:
 
 ```sql
-create unique index data_repo_site_branch_collection_file_idx
-on public.data (repo, site_id, branch, collection, file_id);
+create table public.data (
+  id            bigserial primary key,
+  repo          text not null,
+  site_id       text not null,
+  branch        text not null,
+  collection    text not null,
+  file_id       text not null,
+  file_path     text not null,
+  file_meta     jsonb not null,
+  file_data     text
+);
+
+create unique index data_identity_idx
+  on public.data (repo, site_id, branch, collection, file_id);
 ```
 
-The backend uses:
+The unique index is required for the upsert merge resolution used by batch inserts.
 
-- `GET` requests to read cached rows
-- `POST` requests with merge resolution for upserts
-- `DELETE` requests to remove rows no longer present in GitHub
-
-Make sure the API key you provide has permission to read, insert, update, and delete rows in `public.data`.
+Make sure the anon role has `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on `public.data`, or configure an appropriate RLS policy.
