@@ -19,17 +19,44 @@ export class SupabaseClient {
   supabaseAnonKey: string;
   branch: string;
   repo: string;
+  siteId: string;
 
-  constructor(supabaseUrl: string, supabaseAnonKey: string, branch: string, repo: string) {
+  constructor(
+    supabaseUrl: string,
+    supabaseAnonKey: string,
+    branch: string,
+    repo: string,
+    siteId: string,
+  ) {
     this.supabaseUrl = supabaseUrl;
     this.supabaseAnonKey = supabaseAnonKey;
     this.branch = branch;
     this.repo = repo;
+    this.siteId = siteId;
+  }
+
+  buildUrl(query = '') {
+    return `${this.supabaseUrl}${query}`;
+  }
+
+  buildScopedQuery(collection: string, extraParams: Record<string, string> = {}) {
+    const params = new URLSearchParams({
+      repo: `eq.${this.repo}`,
+      site_id: `eq.${this.siteId}`,
+      branch: `eq.${this.branch}`,
+      collection: `eq.${collection}`,
+    });
+
+    Object.entries(extraParams).forEach(([key, value]) => {
+      params.set(key, value);
+    });
+
+    return `?${params.toString()}`;
   }
 
   async fetchDb(uri: string, method: string, body: any = null) {
     try {
-      const response = await fetch(`${this.supabaseUrl}${uri}`, {
+      const response = await fetch(this.buildUrl(uri), {
         method: method || 'POST',
         headers: {
           apikey: this.supabaseAnonKey,
@@ -53,7 +80,7 @@ export class SupabaseClient {
     }
   }
 
-  async fetchDbPaginated(uri: string, batchSize: number = 500) {
+  async fetchDbPaginated(uri: string, batchSize = 500) {
     const allResults: any[] = [];
     let rangeStart = 0;
     let hasMore = true;
@@ -62,7 +89,7 @@ export class SupabaseClient {
       const rangeEnd = rangeStart + batchSize - 1;
 
       try {
-        const response = await fetch(`${this.supabaseUrl}${uri}`, {
+        const response = await fetch(this.buildUrl(uri), {
           method: 'GET',
           headers: {
             apikey: this.supabaseAnonKey,
@@ -99,13 +126,8 @@ export class SupabaseClient {
 
   async fetchEntries(collection: string, searchTerm?: string) {
     console.log('Fetching entries from supabase for collection:', collection);
-    const searchQuery = searchTerm
-      ? `&file_data=ilike.%25${encodeURIComponent(searchTerm)}%25`
-      : '';
     const response = await this.fetchDbPaginated(
-      `?repo=eq.${encodeURIComponent(this.repo)}&branch=eq.${encodeURIComponent(
-        this.branch,
-      )}&collection=eq.${encodeURIComponent(collection)}${searchQuery}`,
+      this.buildScopedQuery(collection, searchTerm ? { file_data: `ilike.%${searchTerm}%` } : {}),
     );
 
     return response.map((data: any) => ({
@@ -116,23 +138,14 @@ export class SupabaseClient {
 
   async fetchDbFiles(collection: string) {
     console.log('Fetching file list from supabase for collection:', collection);
-    const response = await this.fetchDbPaginated(
-      `?repo=eq.${encodeURIComponent(this.repo)}&branch=eq.${encodeURIComponent(
-        this.branch,
-      )}&collection=eq.${encodeURIComponent(collection)}&select=file_id`,
-    );
+    const response = await this.fetchDbPaginated(this.buildScopedQuery(collection, { select: 'file_id' }));
     return response;
   }
 
   async removeDbFiles(collection: string, fileIds: string[]) {
     console.log('Removing files from supabase with IDs:', fileIds);
     const fileIdsParam = fileIds.map(id => `"${id}"`).join(',');
-    await this.fetchDb(
-      `?repo=eq.${encodeURIComponent(this.repo)}&branch=eq.${encodeURIComponent(
-        this.branch,
-      )}&collection=eq.${encodeURIComponent(collection)}&file_id=in.(${fileIdsParam})`,
-      'DELETE',
-    );
+    await this.fetchDb(this.buildScopedQuery(collection, { file_id: `in.(${fileIdsParam})` }), 'DELETE');
   }
 
   async insertDbFile(
@@ -144,8 +157,9 @@ export class SupabaseClient {
   ) {
     await this.fetchDb('', 'POST', {
       repo: this.repo,
+      site_id: this.siteId,
       branch: this.branch,
-      collection: collection,
+      collection,
       file_id: fileId,
       file_path: filePath,
       file_meta: fileMeta,
@@ -164,6 +178,7 @@ export class SupabaseClient {
   ) {
     const batch = files.map(file => ({
       repo: this.repo,
+      site_id: this.siteId,
       branch: this.branch,
       collection: file.collection,
       file_id: file.fileId,
@@ -185,7 +200,7 @@ export class SupabaseClient {
 
     try {
       const response = await fetch(
-        `${this.supabaseUrl}?on_conflict=repo,branch,collection,file_id`,
+        this.buildUrl('?on_conflict=repo,site_id,branch,collection,file_id'),
         {
           method: 'POST',
           headers: {
