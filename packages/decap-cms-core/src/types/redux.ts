@@ -16,6 +16,7 @@ export type CmsBackendType =
   | 'azure'
   | 'git-gateway'
   | 'github'
+  | 'supabase-github-proxy'
   | 'gitlab'
   | 'gitea'
   | 'bitbucket'

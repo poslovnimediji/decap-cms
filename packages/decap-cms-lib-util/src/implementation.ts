@@ -113,6 +113,8 @@ export type Config = {
     proxy_url?: string;
     auth_type?: string;
     app_id?: string;
+    site_id?: string;
+    anon_key?: string;
     base_url?: string;
     cms_label_prefix?: string;
     api_version?: string;
@@ -195,6 +197,7 @@ export interface Implementation {
     extension: string,
     depth: number,
     pathRegex?: RegExp,
+    searchTerm?: string,
   ) => Promise<ImplementationEntry[]>;
   traverseCursor?: (
     cursor: Cursor,
