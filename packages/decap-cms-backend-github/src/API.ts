@@ -54,6 +54,10 @@ type GitHubCommitter = Omit<
   Endpoints['POST /repos/{owner}/{repo}/git/commits']['request']['data']['committer'],
   'name' | 'email' | 'date'
 > & { name: string; email: string; date?: string };
+export interface CommitAuthor {
+  name: string;
+  email: string;
+}
 type GitHubPull = Omit<
   Endpoints['GET /repos/{owner}/{repo}/pulls']['response']['data'][0],
   'labels'
@@ -223,7 +227,7 @@ export default class API {
   _userPromise?: Promise<GitHubUser>;
   _metadataSemaphore?: Semaphore;
 
-  commitAuthor?: {};
+  commitAuthor?: CommitAuthor;
 
   constructor(config: Config) {
     this.apiRoot = config.apiRoot || 'https://api.github.com';
@@ -1492,10 +1496,16 @@ export default class API {
     author?: GitHubAuthor,
     committer?: GitHubCommitter,
   ) {
+    const commitAuthor = author
+      ? author
+      : this.commitAuthor
+        ? { name: this.commitAuthor.name, email: this.commitAuthor.email }
+        : undefined;
+
     const result: Endpoints['POST /repos/{owner}/{repo}/git/commits']['response']['data'] =
       await this.request(`${this.repoURL}/git/commits`, {
         method: 'POST',
-        body: JSON.stringify({ message, tree: treeSha, parents, author, committer }),
+        body: JSON.stringify({ message, tree: treeSha, parents, author: commitAuthor, committer }),
       });
     return result;
   }

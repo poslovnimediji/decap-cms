@@ -4,6 +4,7 @@ import React from 'react';
 
 import { SupabaseClient } from './supabase';
 import SupabaseAuthenticationPage from './AuthenticationPage';
+import { resolveCommitAuthorFromSupabaseUser } from './commitAuthor';
 
 import type { GitHubUser } from 'decap-cms-backend-github/src/implementation';
 
@@ -11,6 +12,14 @@ interface SupabaseUser extends User {
   access_token?: string;
   refresh_token?: string;
   expires_at?: number;
+  user_name?: string;
+  user_email?: string;
+  email?: string;
+  user_metadata?: {
+    display_name?: string;
+    full_name?: string;
+    name?: string;
+  };
 }
 
 export default class DecapTurboBackend extends GitHubBackend {
@@ -20,6 +29,7 @@ export default class DecapTurboBackend extends GitHubBackend {
   supabaseAnonKey: string;
   supabaseId: string;
   siteId: string;
+  commitAuthorEmailFallback?: string;
   updateUserCredentials: (credentials: Credentials) => void;
   refreshedTokenPromise?: Promise<string>;
 
@@ -30,6 +40,9 @@ export default class DecapTurboBackend extends GitHubBackend {
     this.supabaseAnonKey = (config.backend.anon_key || config.backend.app_id || '') as string;
     this.supabaseId = (config.backend.app_id || '') as string;
     this.siteId = (config.backend.site_id || '') as string;
+    this.commitAuthorEmailFallback =
+      ((config.backend as Record<string, unknown>).commit_author_email as string | undefined) ||
+      ((config.backend as Record<string, unknown>).noreply_email as string | undefined);
 
     this.updateUserCredentials = options.updateUserCredentials || (() => {});
 
@@ -113,12 +126,21 @@ export default class DecapTurboBackend extends GitHubBackend {
 
     const user = await super.authenticate(state);
 
+    this.api!.commitAuthor = resolveCommitAuthorFromSupabaseUser(
+      state as SupabaseUser,
+      this.commitAuthorEmailFallback,
+    );
+
     // Include access_token in the returned user object so it gets stored in auth store
     return {
       ...user,
       ...('access_token' in state && { access_token: state.access_token }),
       ...('refresh_token' in state && { refresh_token: state.refresh_token }),
       ...('expires_at' in state && { expires_at: state.expires_at }),
+      ...('user_name' in state && { user_name: (state as SupabaseUser).user_name }),
+      ...('user_email' in state && { user_email: (state as SupabaseUser).user_email }),
+      ...('email' in state && { email: (state as SupabaseUser).email }),
+      ...('user_metadata' in state && { user_metadata: (state as SupabaseUser).user_metadata }),
     };
   }
 

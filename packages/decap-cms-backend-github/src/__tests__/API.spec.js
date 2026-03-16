@@ -347,6 +347,50 @@ describe('github API', () => {
     });
   });
 
+  describe('createCommit author attribution', () => {
+    it('should include commit author from commitAuthor and keep committer unchanged', async () => {
+      const api = new API({ branch: 'master', repo: 'owner/repo' });
+      api.commitAuthor = { name: 'Alice Editor', email: 'alice@example.com' };
+
+      const responses = {
+        '/repos/owner/repo/git/commits': () => ({ sha: 'commit-sha' }),
+      };
+      mockAPI(api, responses);
+
+      await api.createCommit('commitMessage', 'tree-sha', ['parent-sha']);
+
+      expect(api.request).toHaveBeenCalledWith('/repos/owner/repo/git/commits', {
+        body: JSON.stringify({
+          message: 'commitMessage',
+          tree: 'tree-sha',
+          parents: ['parent-sha'],
+          author: { name: 'Alice Editor', email: 'alice@example.com' },
+        }),
+        method: 'POST',
+      });
+    });
+
+    it('should not inject author when commitAuthor is unavailable', async () => {
+      const api = new API({ branch: 'master', repo: 'owner/repo' });
+
+      const responses = {
+        '/repos/owner/repo/git/commits': () => ({ sha: 'commit-sha' }),
+      };
+      mockAPI(api, responses);
+
+      await api.createCommit('commitMessage', 'tree-sha', ['parent-sha']);
+
+      expect(api.request).toHaveBeenCalledWith('/repos/owner/repo/git/commits', {
+        body: JSON.stringify({
+          message: 'commitMessage',
+          tree: 'tree-sha',
+          parents: ['parent-sha'],
+        }),
+        method: 'POST',
+      });
+    });
+  });
+
   describe('migratePullRequest', () => {
     it('should migrate to pull request labels when no version', async () => {
       const api = new API({ branch: 'master', repo: 'owner/repo' });
