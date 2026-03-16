@@ -5,63 +5,44 @@
 
 import type { BunnyFile } from '../types';
 
-const BUNNY_STORAGE_ENDPOINTS = {
-  us: 'https://storage.bunnycdn.com',
-  eu: 'https://storage.eu.bunnycdn.com',
-  asia: 'https://storage.asia.bunnycdn.com',
-  sydney: 'https://storage.sg.bunnycdn.com',
-};
-
-export type BunnyRegion = keyof typeof BUNNY_STORAGE_ENDPOINTS;
-
 interface BunnyClientOptions {
-  storageZoneName: string;
-  apiKey?: string;
-  region?: BunnyRegion;
+  edgeBaseUrl: string;
+  getAccessToken: () => Promise<string | null>;
+  getActiveSiteId: () => Promise<string | null>;
 }
 
 export class BunnyClient {
-  private storageZoneName: string;
-  private apiKey: string | null;
-  private baseUrl: string;
+  private edgeBaseUrl: string;
+  private getAccessToken: () => Promise<string | null>;
+  private getActiveSiteId: () => Promise<string | null>;
 
-  constructor({ storageZoneName, apiKey, region = 'us' }: BunnyClientOptions) {
-    this.storageZoneName = storageZoneName;
-    this.apiKey = apiKey || null;
-    this.baseUrl = BUNNY_STORAGE_ENDPOINTS[region];
+  constructor({ edgeBaseUrl, getAccessToken, getActiveSiteId }: BunnyClientOptions) {
+    this.edgeBaseUrl = edgeBaseUrl.replace(/\/+$/, '');
+    this.getAccessToken = getAccessToken;
+    this.getActiveSiteId = getActiveSiteId;
   }
 
-  /**
-   * Update the API key at runtime
-   */
-  updateApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
-  }
-
-  /**
-   * Check if client is authenticated
-   */
-  isAuthenticated(): boolean {
-    return !!this.apiKey;
-  }
-
-  private getHeaders(): HeadersInit {
-    if (!this.apiKey) {
-      console.error('[Bunny Client] getHeaders called but API key is not set!');
-      throw new Error('API key not set. Please authenticate first.');
+  private async getHeaders(contentType?: string): Promise<HeadersInit> {
+    const accessToken = await this.getAccessToken();
+    if (!accessToken) {
+      throw new Error('Session token not found. Please authenticate first.');
     }
+
+    const activeSiteId = await this.getActiveSiteId();
+    if (!activeSiteId) {
+      throw new Error('Active site id not found.');
+    }
+
     return {
-      AccessKey: this.apiKey,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'x-site-id': activeSiteId,
+      ...(contentType ? { 'Content-Type': contentType } : {}),
     };
   }
 
   private buildUrl(path: string): string {
-    // Normalize path
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    // URL format: https://storage.bunnycdn.com/{storageZoneName}{path}
-    const url = `${this.baseUrl}/${this.storageZoneName}${normalizedPath}`;
-    return url;
+    const normalizedPath = path.replace(/^\/+/, '');
+    return `${this.edgeBaseUrl}/${normalizedPath}`;
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
@@ -86,7 +67,7 @@ export class BunnyClient {
 
   async listFiles(path = '/'): Promise<BunnyFile[]> {
     const url = this.buildUrl(path);
-    const headers = this.getHeaders();
+    const headers = await this.getHeaders();
     const response = await fetch(url, {
       method: 'GET',
       headers,
@@ -97,18 +78,12 @@ export class BunnyClient {
   }
 
   async uploadFile(filePath: string, file: Blob): Promise<void> {
-    if (!this.apiKey) {
-      throw new Error('API key not set. Please authenticate first.');
-    }
-
     const url = this.buildUrl(filePath);
     const arrayBuffer = await file.arrayBuffer();
 
     const response = await fetch(url, {
       method: 'PUT',
-      headers: {
-        AccessKey: this.apiKey,
-      },
+      headers: await this.getHeaders(),
       body: arrayBuffer,
     });
 
@@ -119,7 +94,7 @@ export class BunnyClient {
     const url = this.buildUrl(filePath);
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: this.getHeaders(),
+      headers: await this.getHeaders(),
     });
 
     await this.handleResponse<void>(response);

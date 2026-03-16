@@ -16,8 +16,9 @@ jest.mock('../api/client', () => {
 
 describe('BunnyFileManager', () => {
   const mockConfig = {
-    storageZoneName: 'test-zone',
-    apiKey: 'test-key',
+    edgeBaseUrl: 'https://edge.example.test/functions/v1/bunny',
+    getAccessToken: jest.fn(async () => 'test-access-token'),
+    getActiveSiteId: jest.fn(async () => 'test-site-id'),
     cdnUrlPrefix: 'https://cdn.example.com',
   };
 

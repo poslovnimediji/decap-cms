@@ -10,18 +10,18 @@ import type { BunnyFile, AddressedMediaFile } from '../types';
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'bmp'];
 
 export interface FileManagerOptions {
-  storageZoneName: string;
-  apiKey: string;
+  edgeBaseUrl: string;
+  getAccessToken: () => Promise<string | null>;
+  getActiveSiteId: () => Promise<string | null>;
   cdnUrlPrefix: string;
-  region?: 'us' | 'eu' | 'asia' | 'sydney';
 }
 
 export class BunnyFileManager {
   private client: BunnyClient;
   private cdnUrlPrefix: string;
 
-  constructor({ storageZoneName, apiKey, cdnUrlPrefix, region = 'us' }: FileManagerOptions) {
-    this.client = new BunnyClient({ storageZoneName, apiKey, region });
+  constructor({ edgeBaseUrl, getAccessToken, getActiveSiteId, cdnUrlPrefix }: FileManagerOptions) {
+    this.client = new BunnyClient({ edgeBaseUrl, getAccessToken, getActiveSiteId });
     this.cdnUrlPrefix = cdnUrlPrefix;
   }
 

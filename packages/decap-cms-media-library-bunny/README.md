@@ -1,15 +1,16 @@
 # Decap CMS Media Library - Bunny.net
 
-A media library integration for [Decap CMS](https://decapcms.org/) to use [Bunny.net](https://bunny.net/) Storage as your media library.
+A media library integration for [Decap CMS](https://decapcms.org/) to use [Bunny.net](https://bunny.net/) Storage through the Decap backend edge proxy.
 
 ## Features
 
-- Browse files and folders in your Bunny Storage zone
+- Browse files and folders in Bunny Storage through your `bunny` edge function
 - Upload single or multiple files
 - Delete files and folders
 - Image preview for supported formats
 - Directory navigation with breadcrumb trail
 - Client-side image filtering with `imagesOnly` support
+- Server-side auth using the active CMS session + site context
 
 ## Installation
 
@@ -40,19 +41,22 @@ DecapCMS.registerMediaLibrary(BunnyMediaLibrary);
 media_library:
   name: bunny
   config:
-    storage_zone_name: your-storage-zone-name
-    api_key: your_api_key_here
     cdn_url_prefix: https://your-storage-zone.b-cdn.net
 ```
 
 ### Configuration Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `storage_zone_name` | String | Yes | Your Bunny Storage zone name |
-| `api_key` | String | Yes | Your Bunny API key (storage zone password) |
-| `cdn_url_prefix` | String | Yes | The CDN URL prefix for your storage zone |
-| `root_path` | String | No | Default root path within the storage zone (default: `/`) |
+| Option           | Type   | Required | Description                                              |
+| ---------------- | ------ | -------- | -------------------------------------------------------- |
+| `cdn_url_prefix` | String | Yes      | The CDN URL prefix for your storage zone                 |
+| `root_path`      | String | No       | Default root path within the storage zone (default: `/`) |
+
+The library resolves auth/site context from Decap CMS backend state:
+
+- `Authorization: Bearer <session_access_token>`
+- `x-site-id: <active_site_id>`
+
+`active_site_id` is sourced from backend site configuration (same source used by Turbo data writes), not from arbitrary input.
 
 ## Usage
 
@@ -82,15 +86,12 @@ collections:
 
 ## Security
 
-**Important**: Never commit your API key to version control. Consider:
-
-- Using environment variables in your build process
-- Using Decap CMS's [manual widget override](https://decapcms.org/docs/beta-features/#manual-initialization) for local config
-- Using a backend proxy service to handle authentication
+- Bunny credentials are handled server-side in your edge function.
+- Clients only send the active CMS session token + site context.
+- Ensure your edge function enforces site membership checks before proxying.
 
 ## Limitations (MVP Version)
 
-- **OAuth subdirectory limitation**: Authentication currently only works for CMS deployed at domain root. For subdirectory deployments (e.g., `example.com/admin/`), users must manually navigate to the subdirectory after authentication. This is a Bunny.net OAuth limitation that has been reported to their team.
 - No search functionality (coming in future versions)
 - No pagination (suitable for small-to-medium numbers of files)
 - Client-side only image filtering (no server-side optimization)

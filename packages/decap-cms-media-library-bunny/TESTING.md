@@ -1,255 +1,116 @@
 # Integration Testing Guide
 
-This guide explains how to test the Bunny.net media library integration with Decap CMS.
+This guide covers testing Bunny media library behavior in the current edge-proxy model.
 
-## Quick Start Testing
+## Local validation
 
-### 1. Use the Dev-Test Config
-
-The repo includes a `dev-test` folder with a sample config. You can use it to test the integration:
+From repository root:
 
 ```bash
-# From root of decap-cms repo
-cd dev-test
-# Update config.yml with your Bunny.net credentials
+npm run test:unit -- --runInBand \
+  packages/decap-cms-media-library-bunny/src/__tests__/client.test.ts \
+  packages/decap-cms-media-library-bunny/src/__tests__/fileManager.test.ts
 ```
 
-### 2. Create a Test Config
+## Manual test config
 
-Create `dev-test/config.yml`:
+Use a backend config that includes:
+
+- `backend.base_url`
+- `backend.site_id`
+- active authenticated user session
+
+Media library config only needs:
 
 ```yaml
-backend:
-  name: test
-
 media_library:
   name: bunny
   config:
-    storage_zone_name: test-zone
-    api_key: your-storage-password
-    cdn_url_prefix: https://test-zone.b-cdn.net
-
-collections:
-  - name: pages
-    label: Pages
-    folder: content
-    create: true
-    fields:
-      - name: title
-        label: Title
-        widget: string
-      
-      - name: hero_image
-        label: Hero Image
-        widget: image
-      
-      - name: gallery
-        label: Gallery
-        widget: list
-        fields:
-          - name: image
-            label: Image
-            widget: image
-          - name: caption
-            label: Caption
-            widget: string
+    cdn_url_prefix: https://your-zone.b-cdn.net
+    root_path: /
 ```
 
-### 3. Test Integration
+## Functional scenarios
 
-#### Via npm workspace
+### 1. File browsing
 
-```bash
-# From repository root
-npm run develop -w packages/decap-cms-media-library-bunny
-```
+- Open an image field.
+- Verify folder navigation and listing.
 
-This will start the package in watch mode. Then in another terminal:
+Expected:
 
-```bash
-npm run start
-```
+- Files/folders render.
+- Breadcrumb and parent navigation work.
 
-#### Via manual testing
+### 2. Single insert
 
-1. Build the package:
-```bash
-npm run build -w packages/decap-cms-media-library-bunny
-```
+- Select one file.
+- Click `Insert`.
 
-2. Create a test HTML file:
+Expected:
 
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Bunny.net Media Library Test</title>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-</head>
-<body>
-  <div id="admin"></div>
-  
-  <script src="./dist/decap-cms-app.js"></script>
-  <script src="./dist/decap-cms-media-library-bunny.js"></script>
-  <script>
-    CMS.registerMediaLibrary(window.DecapCmsMediaLibraryBunny);
-    CMS.init();
-  </script>
-</body>
-</html>
-```
+- One URL is inserted into the field.
+- Modal closes.
 
-## Test Scenarios
+### 3. Multiple insert
 
-### Scenario 1: File Browsing
+- In multi-select mode, select multiple files.
+- Click `Insert`.
 
-**Steps:**
-1. Click the image field's media library button
-2. Verify files load from your Bunny.net storage zone
-3. Navigate folders using breadcrumbs
-4. Use Back button to navigate up
+Expected:
 
-**Expected:**
-- ✅ Files display in grid
-- ✅ File icons show for images
-- ✅ File metadata (size, date) displays
-- ✅ Breadcrumb navigation works
-- ✅ Back button works
+- Multiple URLs are inserted.
 
-### Scenario 2: Single File Selection
+### 4. Upload
 
-**Steps:**
-1. Open media library on image field
-2. Click an image file (not double-click)
-3. Verify checkbox appears and file is selected
-4. Click "Insert" button
+- Upload one or more files.
 
-**Expected:**
-- ✅ File URL inserted into field
-- ✅ Image preview appears in Decap editor
-- ✅ Modal closes automatically
-- ✅ URL format: `https://your-zone.b-cdn.net/path/file.jpg`
+Expected:
 
-### Scenario 3: Multiple File Selection
+- Progress updates.
+- Files appear in listing.
+- Single upload in single-select mode auto-inserts.
 
-**Steps:**
-1. Open media library on a list/array field
-2. Select multiple images by clicking them
-3. Note the counter in the "Insert" button
-4. Click "Insert"
+### 5. Delete
 
-**Expected:**
-- ✅ Multiple URLs inserted as array
-- ✅ All selected files added to the list field
-- ✅ Insert button shows count
+- Delete a file and confirm.
 
-### Scenario 4: File Upload
+Expected:
 
-**Steps:**
-1. Open media library
-2. Drag a file into the drop zone (or click to select)
-3. Wait for upload to complete
-4. Verify file appears in the grid
-5. Verify URL is correct
+- File is removed from listing.
 
-**Expected:**
-- ✅ Progress bar shows upload progress
-- ✅ File appears in grid after upload
-- ✅ File is accessible via CDN URL
-- ✅ Auto-insert on single file upload
+## Error-path scenarios
 
-### Scenario 5: File Deletion
+### Missing session token
 
-**Steps:**
-1. Open media library
-2. Hover over a file
-3. Click the 🗑️ delete button
-4. Confirm deletion
-5. Verify file is removed from grid
+Expected message:
 
-**Expected:**
-- ✅ Confirmation dialog appears
-- ✅ File deleted from Bunny.net
-- ✅ File removed from grid
-- ✅ No error messages
+- `Session token not found. Please log in again.`
 
-### Scenario 6: Image Filtering
+### Missing site context
 
-**Steps:**
-1. Create a mixed folder with images and documents
-2. Open media library with image widget
-3. Verify only images display
-4. Open media library with generic field
-5. Verify all files display
+Expected message:
 
-**Expected:**
-- ✅ Image widget shows only .jpg, .png, .gif, .webp, .svg, .ico, .bmp files
-- ✅ Generic field shows all files
-- ✅ Folders always visible
+- `Active site id is missing in backend configuration.`
 
-### Scenario 7: Error Handling
+### Missing backend base URL
 
-**Steps:**
-1. Set invalid API key in config
-2. Try to open media library
-3.Verify error message displays
-4. Fix credentials
-5. Retry and verify it works
+Expected message:
 
-**Expected:**
-- ✅ Clear error messages
-- ✅ No crashes
-- ✅ Can try again after fixing
+- `Backend base URL is missing. Configure backend.base_url.`
 
-## Browser Compatibility Testing
+### Backend authorization failures
 
-Test in these browsers:
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-- Mobile browsers
+Expected behavior:
 
+- 401/403/500 responses are surfaced as load/upload/delete errors.
 
-## Performance Testing
+## Reporting issues
 
-### Large Folder Test
+Include:
 
-1. Create a storage zone with 1000+ files
-2. Open media library
-3. Measure load time and responsiveness
-4. Scroll through files
-
-**Expected:**
-- ✅ Loads within reasonable time (<5s)
-- ✅ Scrolling is smooth
-- ✅ No memory issues
-
-### Upload Performance Test
-
-1. Upload a large file (>100MB)
-2. Monitor progress bar
-3. Verify completion and insertion
-
-**Expected:**
-- ✅ Progress bar updates smoothly
-- ✅ Upload completes successfully
-- ✅ File is available in CDN
-
-## Reporting Issues
-
-If you encounter issues, include:
-
-1. **Browser & OS:** Which browser/OS you're testing on
-2. **Steps to reproduce:** Exact steps that cause the issue
-3. **Expected vs actual:** What should happen vs what happens
-4. **Screenshot/video:** If applicable
-5. **Console errors:** Any JavaScript errors in browser console
-6. **Config:** Sanitized config.yml (redact credentials)
-
-File issues at: https://github.com/decaporg/decap-cms/issues
-
----
-
-**Thank you for testing!**
+- browser + OS
+- sanitized backend/media config
+- repro steps
+- expected vs actual
+- network response details for `/functions/v1/bunny/*`

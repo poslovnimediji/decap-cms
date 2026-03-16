@@ -19,9 +19,16 @@ export interface BunnyListResponse {
 }
 
 export interface BunnyConfig {
-  storage_zone_name: string;
   cdn_url_prefix: string;
   root_path?: string;
+}
+
+export interface MediaLibraryContext {
+  backendName?: string;
+  backendConfig?: Record<string, unknown>;
+  authUser?: Record<string, unknown>;
+  token?: string;
+  activeSiteId?: string;
 }
 
 export interface AuthState {
@@ -37,15 +44,16 @@ export interface BunnyIntegrationOptions {
 }
 
 export interface BunnyInitOptions {
-  options?: BunnyIntegrationOptions & Record<string, any>;
+  options?: BunnyIntegrationOptions & Record<string, unknown>;
   handleInsert?: (value: string | string[]) => void;
+  getMediaLibraryContext?: () => Promise<MediaLibraryContext>;
 }
 
 export interface MediaLibraryInstance {
   show: (args?: {
     id?: string;
     value?: string | string[];
-    config?: Record<string, any>;
+    config?: Record<string, unknown>;
     allowMultiple?: boolean;
     imagesOnly?: boolean;
   }) => void;

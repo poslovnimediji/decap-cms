@@ -8,71 +8,66 @@ import { createRoot } from 'react-dom/client';
 
 import BunnyWidget from './components/BunnyWidget';
 
+function readStoredAuthUser() {
+  try {
+    const stored = window.localStorage.getItem('decap-cms-user');
+    return stored ? JSON.parse(stored) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getBackendConfigFromWindow() {
+  if (window.CMS_CONFIG && window.CMS_CONFIG.backend) {
+    return window.CMS_CONFIG.backend;
+  }
+  return null;
+}
+
+function buildEdgeBaseUrl(baseUrl) {
+  const normalized = baseUrl.replace(/\/+$/, '');
+  return `${normalized}/functions/v1/bunny`;
+}
+
+function createContextResolver(providedConfig, getMediaLibraryContext) {
+  return async () => {
+    const context = getMediaLibraryContext ? await getMediaLibraryContext() : {};
+    const storedAuthUser = readStoredAuthUser() || {};
+    const backendConfig = context.backendConfig || getBackendConfigFromWindow() || {};
+    const authUser = context.authUser || storedAuthUser;
+
+    const accessToken =
+      context.token ||
+      authUser.access_token ||
+      authUser.token ||
+      storedAuthUser.access_token ||
+      null;
+    const activeSiteId = context.activeSiteId || backendConfig.site_id || null;
+    const baseUrl = backendConfig.base_url;
+
+    return {
+      accessToken,
+      activeSiteId,
+      edgeBaseUrl: baseUrl ? buildEdgeBaseUrl(baseUrl) : null,
+    };
+  };
+}
+
 /**
  * Initialize the Bunny.net media library
  * @param options - Configuration options including storageZoneId, cdnUrlPrefix
  * @param handleInsert - Callback function when user inserts files
  * @returns MediaLibraryInstance with show, hide, and other required methods
  */
-async function init({ options = {}, handleInsert = () => {} } = {}) {
+async function init({ options = {}, handleInsert = () => {}, getMediaLibraryContext } = {}) {
   const { config: providedConfig = {} } = options;
 
   // Validate required configuration
-  if (!providedConfig.storage_zone_name) {
-    throw new Error('storage_zone_name is required in media_library config');
-  }
   if (!providedConfig.cdn_url_prefix) {
     throw new Error('cdn_url_prefix is required in media_library config');
   }
 
-  const { BunnyAuthManager } = await import('./api/authManager');
-
-  function safelyRedirectToReturnUrl(returnUrl) {
-    try {
-      const safeUrl = new URL(returnUrl, window.location.origin);
-      if (safeUrl.origin === window.location.origin) {
-        window.location.replace(safeUrl.toString());
-      }
-    } catch {
-      // keep current page when returnUrl is invalid
-    }
-  }
-
-  async function processAuthCallback(accountApiKey, zoneName) {
-    BunnyAuthManager.setStoredAccountApiKey(accountApiKey);
-    BunnyAuthManager.setStoredStorageZoneName(zoneName);
-
-    const { BunnyManagementApi } = await import('./api/managementApi');
-    const storageZonePassword = await BunnyManagementApi.fetchStorageZonePassword(
-      accountApiKey,
-      zoneName,
-    );
-    BunnyAuthManager.setStoredApiKey(storageZonePassword);
-
-    const returnUrl = BunnyAuthManager.resolveReturnUrl();
-    BunnyAuthManager.cleanAuthParamsFromUrl();
-
-    if (returnUrl) {
-      BunnyAuthManager.clearReturnUrl();
-      setTimeout(() => safelyRedirectToReturnUrl(returnUrl), 100);
-    }
-  }
-
-  const { apiKey: urlApiKey, storageName: urlStorageName } =
-    BunnyAuthManager.extractCredentialsFromUrl();
-
-  if (urlApiKey) {
-    const storageZoneName = urlStorageName || providedConfig.storage_zone_name;
-
-    try {
-      await processAuthCallback(urlApiKey, storageZoneName);
-    } catch (error) {
-      alert(
-        `Failed to fetch storage credentials: ${error.message}\n\nPlease ensure you have access to the storage zone "${storageZoneName}"`,
-      );
-      return null;
-    }
-  }
+  const resolveRequestContext = createContextResolver(providedConfig, getMediaLibraryContext);
 
   const config = providedConfig;
   let widgetContainer = null;
@@ -101,6 +96,7 @@ async function init({ options = {}, handleInsert = () => {} } = {}) {
       widgetRoot.render(
         React.createElement(BunnyWidget, {
           config,
+          resolveRequestContext,
           onInsert: insertedValue => {
             handleInsert(insertedValue);
             mediaLibraryInstance.hide();

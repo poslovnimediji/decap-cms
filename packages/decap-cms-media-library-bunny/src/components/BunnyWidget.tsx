@@ -6,11 +6,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 import { BunnyFileManager } from '../api/fileManager';
-import { BunnyAuthManager } from '../api/authManager';
-import FileGrid from './FileGrid';
-import FileBrowser from './FileBrowser';
-import FileUpload from './FileUpload';
-import LoginPrompt from './LoginPrompt';
+import BunnyFileGrid from './FileGrid';
+import BunnyFileBrowser from './FileBrowser';
+import BunnyFileUpload from './FileUpload';
 import {
   StyledWidget,
   StyledBackdrop,
@@ -31,10 +29,14 @@ import type { AddressedMediaFile } from '../types';
 
 interface BunnyWidgetProps {
   config: {
-    storage_zone_name: string;
     cdn_url_prefix: string;
     root_path?: string;
   };
+  resolveRequestContext: () => Promise<{
+    accessToken: string | null;
+    activeSiteId: string | null;
+    edgeBaseUrl: string | null;
+  }>;
   onInsert: (value: string | string[]) => void;
   onClose: () => void;
   allowMultiple?: boolean;
@@ -44,14 +46,13 @@ interface BunnyWidgetProps {
 
 export function BunnyWidget({
   config,
+  resolveRequestContext,
   onInsert,
   onClose,
   allowMultiple = false,
   imagesOnly = false,
 }: BunnyWidgetProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [storageZoneName, setStorageZoneName] = useState<string | null>(null);
 
   const [currentPath, setCurrentPath] = useState<string>(config.root_path || '/');
   const [files, setFiles] = useState<AddressedMediaFile[]>([]);
@@ -60,52 +61,90 @@ export function BunnyWidget({
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [isManagerReady, setIsManagerReady] = useState(false);
 
   const fileManagerRef = useRef<BunnyFileManager | null>(null);
 
-  // Check for authentication on mount (from localStorage or URL params after redirect)
   useEffect(() => {
-    // Check if index.js is still processing OAuth callback
-    // If we have URL params, the index.js will handle them and redirect
-    const { apiKey: urlApiKey } = BunnyAuthManager.extractCredentialsFromUrl();
-    if (urlApiKey) {
-      // Don't do anything, let index.js handle the OAuth flow
-      return;
+    let isMounted = true;
+
+    async function validateContext() {
+      try {
+        const context = await resolveRequestContext();
+        if (!isMounted) {
+          return;
+        }
+
+        if (!context.accessToken) {
+          throw new Error('Session token not found. Please log in again.');
+        }
+
+        if (!context.activeSiteId) {
+          throw new Error('Active site id is missing in backend configuration.');
+        }
+
+        if (!context.edgeBaseUrl) {
+          throw new Error('Backend base URL is missing. Configure backend.base_url.');
+        }
+
+        setError(null);
+        setIsAuthenticated(true);
+      } catch (err) {
+        if (!isMounted) {
+          return;
+        }
+        setIsAuthenticated(false);
+        setError(err instanceof Error ? err.message : String(err));
+      }
     }
 
-    // Check for existing stored credentials (Storage Zone Password)
-    const storedKey = BunnyAuthManager.getStoredApiKey();
-    const storedZoneName = BunnyAuthManager.getStoredStorageZoneName();
-    if (storedKey && storedZoneName) {
-      setApiKey(storedKey);
-      setStorageZoneName(storedZoneName);
-      setIsAuthenticated(true);
-    }
-  }, []);
+    validateContext();
 
-  // Initialize file manager when authenticated
+    return () => {
+      isMounted = false;
+    };
+  }, [resolveRequestContext]);
+
   useEffect(() => {
-    if (!isAuthenticated || !apiKey || !storageZoneName) {
+    let isMounted = true;
+
+    if (!isAuthenticated) {
       fileManagerRef.current = null;
+      setIsManagerReady(false);
       return;
     }
 
-    try {
-      fileManagerRef.current = new BunnyFileManager({
-        storageZoneName,
-        apiKey,
-        cdnUrlPrefix: config.cdn_url_prefix,
-      });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error('[Bunny Widget] Failed to initialize file manager:', errorMsg);
-      setError(`Failed to initialize: ${errorMsg}`);
+    async function initializeFileManager() {
+      try {
+        const context = await resolveRequestContext();
+        if (!isMounted || !context.edgeBaseUrl) {
+          return;
+        }
+        fileManagerRef.current = new BunnyFileManager({
+          edgeBaseUrl: context.edgeBaseUrl,
+          getAccessToken: async () => (await resolveRequestContext()).accessToken,
+          getActiveSiteId: async () => (await resolveRequestContext()).activeSiteId,
+          cdnUrlPrefix: config.cdn_url_prefix,
+        });
+        setIsManagerReady(true);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Bunny Widget] Failed to initialize file manager:', errorMsg);
+        setError(`Failed to initialize: ${errorMsg}`);
+        setIsManagerReady(false);
+      }
     }
-  }, [isAuthenticated, apiKey, storageZoneName, config.cdn_url_prefix]);
+
+    initializeFileManager();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, config.cdn_url_prefix, resolveRequestContext]);
 
   // Load files when path changes (only when authenticated)
   useEffect(() => {
-    if (!isAuthenticated || !fileManagerRef.current) {
+    if (!isAuthenticated || !isManagerReady || !fileManagerRef.current) {
       setIsLoading(false);
       return;
     }
@@ -127,22 +166,7 @@ export function BunnyWidget({
     }
 
     loadFiles();
-  }, [currentPath, imagesOnly, isAuthenticated]);
-
-  function handleLogin() {
-    // Redirect to Bunny authentication in the same window
-    BunnyAuthManager.redirectToAuth();
-  }
-
-  function handleLogout() {
-    BunnyAuthManager.clearStoredApiKey();
-    BunnyAuthManager.clearReturnUrl();
-    setApiKey(null);
-    setIsAuthenticated(false);
-    setFiles([]);
-    setSelectedFiles(new Set());
-    setCurrentPath(config.root_path || '/');
-  }
+  }, [currentPath, imagesOnly, isAuthenticated, isManagerReady]);
 
   function handleNavigate(path: string) {
     setCurrentPath(path);
@@ -247,7 +271,6 @@ export function BunnyWidget({
     onClose();
   }
 
-  // Show login prompt if not authenticated
   if (!isAuthenticated) {
     return (
       <StyledWidget>
@@ -258,7 +281,7 @@ export function BunnyWidget({
               ✕
             </StyledCloseButton>
           </StyledHeader>
-          <LoginPrompt onLogin={handleLogin} />
+          <StyledEmpty>{error || 'Please authenticate in Decap CMS first.'}</StyledEmpty>
         </StyledContainer>
         <StyledBackdrop onClick={onClose} />
       </StyledWidget>
@@ -281,14 +304,14 @@ export function BunnyWidget({
         {error && <StyledError>{error}</StyledError>}
 
         {/* Navigation */}
-        <FileBrowser
+        <BunnyFileBrowser
           currentPath={currentPath}
           onNavigate={handleNavigate}
           onParentDirectory={handleParentDirectory}
         />
 
         {/* Upload Area */}
-        <FileUpload
+        <BunnyFileUpload
           onUpload={handleUpload}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
@@ -302,7 +325,7 @@ export function BunnyWidget({
           ) : files.length === 0 ? (
             <StyledEmpty>No files found</StyledEmpty>
           ) : (
-            <FileGrid
+            <BunnyFileGrid
               files={files}
               selectedFiles={selectedFiles}
               onSelectFile={handleSelectFile}
@@ -315,9 +338,6 @@ export function BunnyWidget({
 
         {/* Footer Actions */}
         <StyledFooter>
-          <StyledButtonSecondary onClick={handleLogout} title="Logout from Bunny">
-            Logout
-          </StyledButtonSecondary>
           <StyledButtonSecondary onClick={onClose}>Cancel</StyledButtonSecondary>
           {selectedFiles.size > 0 && (
             <StyledButtonPrimary onClick={handleInsertSelected} disabled={isUploading || isLoading}>

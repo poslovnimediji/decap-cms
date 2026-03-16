@@ -8,15 +8,18 @@ import { BunnyClient } from '../api/client';
 global.fetch = jest.fn();
 
 describe('BunnyClient', () => {
+  const getAccessToken = jest.fn(async () => 'test-access-token');
+  const getActiveSiteId = jest.fn(async () => 'test-site-id');
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it('should initialize with correct parameters', () => {
     const client = new BunnyClient({
-      storageZoneName: 'test-zone',
-      apiKey: 'test-key',
-      region: 'us',
+      edgeBaseUrl: 'https://edge.example.test/functions/v1/bunny',
+      getAccessToken,
+      getActiveSiteId,
     });
 
     expect(client).toBeTruthy();
@@ -44,19 +47,21 @@ describe('BunnyClient', () => {
     });
 
     const client = new BunnyClient({
-      storageZoneName: 'test-zone',
-      apiKey: 'test-key',
+      edgeBaseUrl: 'https://edge.example.test/functions/v1/bunny',
+      getAccessToken,
+      getActiveSiteId,
     });
 
     const files = await client.listFiles('/');
 
     expect(files).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('test-zone'),
+      'https://edge.example.test/functions/v1/bunny/',
       expect.objectContaining({
         method: 'GET',
         headers: expect.objectContaining({
-          AccessKey: 'test-key',
+          Authorization: 'Bearer test-access-token',
+          'x-site-id': 'test-site-id',
         }),
       }),
     );
@@ -74,8 +79,9 @@ describe('BunnyClient', () => {
     });
 
     const client = new BunnyClient({
-      storageZoneName: 'test-zone',
-      apiKey: 'invalid-key',
+      edgeBaseUrl: 'https://edge.example.test/functions/v1/bunny',
+      getAccessToken,
+      getActiveSiteId,
     });
 
     await expect(client.listFiles('/')).rejects.toThrow('Bunny.net API error: 401');
@@ -83,8 +89,9 @@ describe('BunnyClient', () => {
 
   it('should generate public URL correctly', () => {
     const client = new BunnyClient({
-      storageZoneName: 'test-zone',
-      apiKey: 'test-key',
+      edgeBaseUrl: 'https://edge.example.test/functions/v1/bunny',
+      getAccessToken,
+      getActiveSiteId,
     });
 
     const url = client.generatePublicUrl('https://cdn.example.com', '/folder/file.jpg');
@@ -94,8 +101,9 @@ describe('BunnyClient', () => {
 
   it('should handle URL generation with trailing slash', () => {
     const client = new BunnyClient({
-      storageZoneName: 'test-zone',
-      apiKey: 'test-key',
+      edgeBaseUrl: 'https://edge.example.test/functions/v1/bunny',
+      getAccessToken,
+      getActiveSiteId,
     });
 
     const url = client.generatePublicUrl('https://cdn.example.com/', '/folder/file.jpg');
