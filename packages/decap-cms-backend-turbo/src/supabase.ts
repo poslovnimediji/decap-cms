@@ -191,7 +191,7 @@ export class SupabaseClient {
     const seen = new Map();
     const deduplicatedBatch = [];
     for (const item of batch) {
-      const key = `${item.repo}|${item.branch}|${item.collection}|${item.file_id}`;
+      const key = `${item.site_id}|${item.repo}|${item.branch}|${item.file_path}`;
       if (!seen.has(key)) {
         seen.set(key, true);
         deduplicatedBatch.push(item);
@@ -200,7 +200,7 @@ export class SupabaseClient {
 
     try {
       const response = await fetch(
-        this.buildUrl('?on_conflict=repo,site_id,branch,collection,file_id'),
+        this.buildUrl('?on_conflict=site_id,repo,branch,file_path'),
         {
           method: 'POST',
           headers: {
