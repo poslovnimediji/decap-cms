@@ -16,6 +16,7 @@ interface SupabaseUser extends User {
   user_email?: string;
   email?: string;
   user_metadata?: {
+    active_site_id?: string;
     display_name?: string;
     full_name?: string;
     name?: string;
@@ -103,6 +104,7 @@ export default class DecapTurboBackend extends GitHubBackend {
     const supabaseUser = user as SupabaseUser;
     if (supabaseUser.access_token) {
       this.supabaseAccessToken = supabaseUser.access_token;
+      this.supabase.setAccessToken(this.supabaseAccessToken);
     }
     if (supabaseUser.refresh_token) {
       this.supabaseRefreshToken = supabaseUser.refresh_token;
@@ -116,12 +118,19 @@ export default class DecapTurboBackend extends GitHubBackend {
   async authenticate(state: Credentials) {
     if ('access_token' in state) {
       this.supabaseAccessToken = state.access_token as string;
+      this.supabase.setAccessToken(this.supabaseAccessToken);
     }
     if ('refresh_token' in state) {
       this.supabaseRefreshToken = state.refresh_token as string;
     }
     if ('expires_at' in state) {
       this.supabaseExpiresAt = state.expires_at as number;
+    }
+
+    const supabaseState = state as SupabaseUser;
+    const activeSiteFromState = supabaseState.user_metadata?.active_site_id;
+    if (this.siteId && this.supabaseAccessToken && activeSiteFromState !== this.siteId) {
+      await this.setActiveSiteAndRefresh();
     }
 
     const user = await super.authenticate(state);
@@ -142,6 +151,32 @@ export default class DecapTurboBackend extends GitHubBackend {
       ...('email' in state && { email: (state as SupabaseUser).email }),
       ...('user_metadata' in state && { user_metadata: (state as SupabaseUser).user_metadata }),
     };
+  }
+
+  async setActiveSiteAndRefresh() {
+    if (!this.supabaseAccessToken || !this.siteId) {
+      return;
+    }
+
+    const updateResponse = await fetch(`https://${this.supabaseId}.supabase.co/auth/v1/user`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: this.supabaseAnonKey,
+        Authorization: `Bearer ${this.supabaseAccessToken}`,
+      },
+      body: JSON.stringify({
+        data: {
+          active_site_id: this.siteId,
+        },
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error('Failed to set active_site_id in Supabase user metadata');
+    }
+
+    await this.getRefreshedAccessToken();
   }
 
   async getRefreshedAccessToken(): Promise<string> {
@@ -175,17 +210,26 @@ export default class DecapTurboBackend extends GitHubBackend {
       this.supabaseAccessToken = data.access_token;
       this.supabaseRefreshToken = data.refresh_token;
       this.supabaseExpiresAt = data.expires_at;
+      this.supabase.setAccessToken(this.supabaseAccessToken);
+      this.token = data.access_token;
+      if (this.api) {
+        this.api.token = data.access_token;
+      }
+      this._currentUserPromise = undefined;
       this.refreshedTokenPromise = undefined;
 
       // Update stored credentials
       this.updateUserCredentials({
-        token: this.token!,
+        token: data.access_token,
         refresh_token: data.refresh_token,
         access_token: data.access_token,
         expires_at: data.expires_at,
       } as any);
 
       return data.access_token;
+    }).catch((error: Error) => {
+      this.refreshedTokenPromise = undefined;
+      throw error;
     });
 
     return this.refreshedTokenPromise;

@@ -17,6 +17,7 @@ type File = {
 export class SupabaseClient {
   supabaseUrl: string;
   supabaseAnonKey: string;
+  supabaseAccessToken: string | null;
   branch: string;
   repo: string;
   siteId: string;
@@ -27,12 +28,18 @@ export class SupabaseClient {
     branch: string,
     repo: string,
     siteId: string,
+    supabaseAccessToken: string | null = null,
   ) {
     this.supabaseUrl = supabaseUrl;
     this.supabaseAnonKey = supabaseAnonKey;
     this.branch = branch;
     this.repo = repo;
     this.siteId = siteId;
+    this.supabaseAccessToken = supabaseAccessToken;
+  }
+
+  setAccessToken(token: string | null) {
+    this.supabaseAccessToken = token;
   }
 
   buildUrl(query = '') {
@@ -60,7 +67,7 @@ export class SupabaseClient {
         method: method || 'POST',
         headers: {
           apikey: this.supabaseAnonKey,
-          Authorization: 'Bearer ' + this.supabaseAnonKey,
+          Authorization: `Bearer ${this.supabaseAccessToken || this.supabaseAnonKey}`,
           'Content-Type': 'application/json',
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -93,7 +100,7 @@ export class SupabaseClient {
           method: 'GET',
           headers: {
             apikey: this.supabaseAnonKey,
-            Authorization: 'Bearer ' + this.supabaseAnonKey,
+            Authorization: `Bearer ${this.supabaseAccessToken || this.supabaseAnonKey}`,
             'Content-Type': 'application/json',
             Range: `${rangeStart}-${rangeEnd}`,
           },
@@ -205,7 +212,7 @@ export class SupabaseClient {
           method: 'POST',
           headers: {
             apikey: this.supabaseAnonKey,
-            Authorization: 'Bearer ' + this.supabaseAnonKey,
+            Authorization: `Bearer ${this.supabaseAccessToken || this.supabaseAnonKey}`,
             'Content-Type': 'application/json',
             Prefer: 'resolution=merge-duplicates',
           },
