@@ -27,8 +27,7 @@ const LoginButton = styled.button`
 `;
 
 const AuthForm = styled.form`
-  width: 350px;
-  margin-top: -80px;
+  max-width: 350px;
 `;
 
 const AuthInput = styled.input`
