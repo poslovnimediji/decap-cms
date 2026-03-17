@@ -131,6 +131,22 @@ export class SupabaseClient {
     return allResults;
   }
 
+  async fetchEntryByPath(path: string) {
+    const params = new URLSearchParams({
+      repo: `eq.${this.repo}`,
+      site_id: `eq.${this.siteId}`,
+      branch: `eq.${this.branch}`,
+      file_path: `eq.${path}`,
+    });
+    const results = await this.fetchDbPaginated(`?${params.toString()}`);
+    if (results.length === 0) return null;
+    const data = results[0];
+    return {
+      file: data.file_meta,
+      data: data.file_data,
+    };
+  }
+
   async fetchEntries(collection: string, searchTerm?: string) {
     console.log('Fetching entries from supabase for collection:', collection);
     const response = await this.fetchDbPaginated(

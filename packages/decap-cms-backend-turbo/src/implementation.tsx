@@ -267,6 +267,15 @@ export default class DecapTurboBackend extends GitHubBackend {
     return this._currentUserPromise!;
   }
 
+
+  async getEntry(path: string) {
+    const cached = await this.supabase.fetchEntryByPath(path);
+    if (cached) {
+      return cached;
+    }
+    return super.getEntry(path);
+  }
+
   async allEntriesByFolder(
     folder: string,
     extension: string,
