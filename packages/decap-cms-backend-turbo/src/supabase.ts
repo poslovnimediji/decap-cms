@@ -313,4 +313,51 @@ export class SupabaseClient {
 
     return;
   }
+
+  async updateEntriesAfterSave(files: Array<{ path: string; raw: string; id: string }>) {
+    console.log('Updating cache for persisted entries:', files.map(f => f.path));
+
+    const batch: Array<{
+      collection: string;
+      fileId: string;
+      filePath: string;
+      fileMeta: any;
+      fileData: string;
+    }> = [];
+
+    for (const file of files) {
+      const params = new URLSearchParams({
+        repo: `eq.${this.repo}`,
+        site_id: `eq.${this.siteId}`,
+        branch: `eq.${this.branch}`,
+        file_path: `eq.${file.path}`,
+      });
+
+      const existingRows = await this.fetchDbPaginated(`?${params.toString()}`);
+      if (existingRows.length === 0) {
+        continue;
+      }
+
+      for (const row of existingRows) {
+        batch.push({
+          collection: row.collection,
+          fileId: file.id,
+          filePath: file.path,
+          fileMeta: {
+            ...(row.file_meta || {}),
+            id: file.id,
+            path: file.path,
+            name: file.path.split('/').pop() || '',
+            size: file.raw.length,
+            type: 'blob',
+          },
+          fileData: file.raw,
+        });
+      }
+    }
+
+    if (batch.length > 0) {
+      await this.insertDbFilesBatch(batch);
+    }
+  }
 }

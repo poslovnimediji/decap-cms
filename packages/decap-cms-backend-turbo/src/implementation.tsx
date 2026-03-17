@@ -276,6 +276,23 @@ export default class DecapTurboBackend extends GitHubBackend {
     return super.getEntry(path);
   }
 
+  async persistEntry(entry: any, options: any = {}) {
+    const result = await super.persistEntry(entry, options);
+    if (result && entry.dataFiles && entry.dataFiles.length > 0) {
+      try {
+        const filesToCache = entry.dataFiles.map((file: any) => ({
+          path: file.path || file.newPath || file.slug,
+          raw: file.raw,
+          id: file.id,
+        }));
+        await this.supabase.updateEntriesAfterSave(filesToCache);
+      } catch (error) {
+        console.warn('Failed to update cache:', error);
+      }
+    }
+    return result;
+  }
+
   async allEntriesByFolder(
     folder: string,
     extension: string,
