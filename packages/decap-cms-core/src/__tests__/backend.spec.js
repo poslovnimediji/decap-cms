@@ -318,6 +318,50 @@ describe('Backend', () => {
     });
   });
 
+  describe('cross-tab auth sync', () => {
+    const implementation = {
+      init: jest.fn(() => implementation),
+    };
+
+    it('updates in-memory user when auth storage changes to matching backend', () => {
+      const authStore = {
+        retrieve: jest.fn().mockReturnValue({ name: 'Editor', backendName: 'github' }),
+        store: jest.fn(),
+        logout: jest.fn(),
+      };
+
+      const backend = new Backend(implementation, {
+        config: {},
+        backendName: 'github',
+        authStore,
+      });
+
+      window.dispatchEvent(new StorageEvent('storage', { key: 'decap-cms-user' }));
+
+      expect(backend.user).toEqual({ name: 'Editor', backendName: 'github' });
+    });
+
+    it('clears in-memory user when auth storage is removed or switched backend', () => {
+      const authStore = {
+        retrieve: jest.fn().mockReturnValue(null),
+        store: jest.fn(),
+        logout: jest.fn(),
+      };
+
+      const backend = new Backend(implementation, {
+        config: {},
+        backendName: 'github',
+        authStore,
+      });
+
+      backend.user = { name: 'Editor', backendName: 'github' };
+
+      window.dispatchEvent(new StorageEvent('storage', { key: 'decap-cms-user' }));
+
+      expect(backend.user).toBeNull();
+    });
+  });
+
   describe('persistEntry', () => {
     it('should update the draft with the new entry returned by preSave event', async () => {
       const implementation = {

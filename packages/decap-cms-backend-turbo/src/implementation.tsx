@@ -23,6 +23,15 @@ interface SupabaseUser extends User {
   };
 }
 
+type SupabaseRefreshError = Error & {
+  status?: number;
+  code?: string;
+  isTerminal?: boolean;
+};
+
+const REFRESH_BUFFER_SECONDS = 300;
+const REFRESH_RETRY_ATTEMPTS = 3;
+
 export default class DecapTurboBackend extends GitHubBackend {
   supabaseAccessToken: string | null = null;
   supabaseRefreshToken: string | null = null;
@@ -67,13 +76,19 @@ export default class DecapTurboBackend extends GitHubBackend {
       // Try to verify the token is still valid by checking if we can get user info
       try {
         const now = Math.floor(Date.now() / 1000);
-        const tokenExpired = this.supabaseExpiresAt && this.supabaseExpiresAt <= now;
+        const tokenExpiringSoon =
+          this.supabaseExpiresAt && this.supabaseExpiresAt - now <= REFRESH_BUFFER_SECONDS;
 
-        if (tokenExpired && this.supabaseRefreshToken) {
+        if (tokenExpiringSoon && this.supabaseRefreshToken) {
           // Try to refresh if expired
-          await this.getRefreshedAccessToken();
-          auth = true;
-        } else if (!tokenExpired) {
+          try {
+            await this.getRefreshedAccessToken();
+            auth = true;
+          } catch (error) {
+            const refreshError = error as SupabaseRefreshError;
+            auth = !refreshError.isTerminal;
+          }
+        } else if (!tokenExpiringSoon) {
           auth = true;
         }
       } catch (e) {
@@ -179,16 +194,42 @@ export default class DecapTurboBackend extends GitHubBackend {
     await this.getRefreshedAccessToken();
   }
 
-  async getRefreshedAccessToken(): Promise<string> {
-    if (this.refreshedTokenPromise) {
-      return this.refreshedTokenPromise;
-    }
+  isOffline() {
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
+  }
 
+  isTerminalRefreshFailure(status?: number, code?: string) {
+    if (status === 401) {
+      return true;
+    }
+    if (status === 400 && ['invalid_grant', 'invalid_refresh_token'].includes(String(code))) {
+      return true;
+    }
+    return false;
+  }
+
+  isRetryableStatus(status?: number) {
+    if (!status) {
+      return true;
+    }
+    if (status === 408 || status === 429) {
+      return true;
+    }
+    return status >= 500;
+  }
+
+  async delay(ms: number) {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async fetchSupabaseRefreshToken() {
     if (!this.supabaseRefreshToken) {
-      throw new Error('No refresh token available');
+      const noTokenError = new Error('No refresh token available') as SupabaseRefreshError;
+      noTokenError.isTerminal = true;
+      throw noTokenError;
     }
 
-    this.refreshedTokenPromise = fetch(
+    const response = await fetch(
       `https://${this.supabaseId}.supabase.co/auth/v1/token?grant_type=refresh_token`,
       {
         method: 'POST',
@@ -200,57 +241,124 @@ export default class DecapTurboBackend extends GitHubBackend {
           refresh_token: this.supabaseRefreshToken,
         }),
       },
-    ).then(async (res: Response) => {
-      if (!res.ok) {
+    );
+
+    if (!response.ok) {
+      let errorBody: { error_code?: string; error?: string } | undefined;
+      try {
+        errorBody = await response.json();
+      } catch (e) {
+        errorBody = undefined;
+      }
+
+      const refreshError = new Error('Failed to refresh Supabase token') as SupabaseRefreshError;
+      refreshError.status = response.status;
+      refreshError.code = errorBody?.error_code || errorBody?.error;
+      refreshError.isTerminal = this.isTerminalRefreshFailure(refreshError.status, refreshError.code);
+      throw refreshError;
+    }
+
+    return response.json();
+  }
+
+  async getRefreshedAccessToken(): Promise<string> {
+    if (this.refreshedTokenPromise) {
+      return this.refreshedTokenPromise;
+    }
+    this.refreshedTokenPromise = (async () => {
+      let lastError: SupabaseRefreshError | undefined;
+
+      for (let attempt = 1; attempt <= REFRESH_RETRY_ATTEMPTS; attempt++) {
+        try {
+          const data = await this.fetchSupabaseRefreshToken();
+
+          this.supabaseAccessToken = data.access_token;
+          this.supabaseRefreshToken = data.refresh_token;
+          this.supabaseExpiresAt = data.expires_at;
+          this.supabase.setAccessToken(this.supabaseAccessToken);
+          this.token = data.access_token;
+          if (this.api) {
+            this.api.token = data.access_token;
+          }
+          this._currentUserPromise = undefined;
+
+          this.updateUserCredentials({
+            token: data.access_token,
+            refresh_token: data.refresh_token,
+            access_token: data.access_token,
+            expires_at: data.expires_at,
+          } as any);
+
+          return data.access_token;
+        } catch (error) {
+          const refreshError = error as SupabaseRefreshError;
+          if (typeof refreshError.isTerminal !== 'boolean') {
+            refreshError.isTerminal = this.isOffline() ? false : !this.isRetryableStatus(refreshError.status);
+          }
+
+          lastError = refreshError;
+          const canRetry = !refreshError.isTerminal && attempt < REFRESH_RETRY_ATTEMPTS;
+          if (!canRetry) {
+            break;
+          }
+
+          await this.delay(250 * attempt);
+        }
+      }
+
+      throw lastError || new Error('Failed to refresh Supabase token');
+    })()
+      .catch((error: Error) => {
+        const refreshError = error as SupabaseRefreshError;
+        if (typeof refreshError.isTerminal !== 'boolean') {
+          refreshError.isTerminal = false;
+        }
+        throw refreshError;
+      })
+      .finally(() => {
         this.refreshedTokenPromise = undefined;
-        throw new Error('Failed to refresh Supabase token');
-      }
-
-      const data = await res.json();
-      this.supabaseAccessToken = data.access_token;
-      this.supabaseRefreshToken = data.refresh_token;
-      this.supabaseExpiresAt = data.expires_at;
-      this.supabase.setAccessToken(this.supabaseAccessToken);
-      this.token = data.access_token;
-      if (this.api) {
-        this.api.token = data.access_token;
-      }
-      this._currentUserPromise = undefined;
-      this.refreshedTokenPromise = undefined;
-
-      // Update stored credentials
-      this.updateUserCredentials({
-        token: data.access_token,
-        refresh_token: data.refresh_token,
-        access_token: data.access_token,
-        expires_at: data.expires_at,
-      } as any);
-
-      return data.access_token;
-    }).catch((error: Error) => {
-      this.refreshedTokenPromise = undefined;
-      throw error;
-    });
+      });
 
     return this.refreshedTokenPromise;
+  }
+
+  shouldForceLogoutOnRefreshFailure(error: unknown) {
+    const refreshError = error as SupabaseRefreshError;
+    return Boolean(refreshError?.isTerminal);
+  }
+
+  getRefreshFailureMessage(error: unknown) {
+    if (this.shouldForceLogoutOnRefreshFailure(error)) {
+      return 'Session expired. Please log in again.';
+    }
+    if (this.isOffline()) {
+      return 'Unable to refresh session while offline. Please reconnect and retry.';
+    }
+    return 'Unable to refresh session right now. Please retry in a moment.';
+  }
+
+  async refreshSessionIfNeeded() {
+    const now = Math.floor(Date.now() / 1000);
+    if (!this.supabaseExpiresAt || this.supabaseExpiresAt - now >= REFRESH_BUFFER_SECONDS) {
+      return;
+    }
+
+    try {
+      await this.getRefreshedAccessToken();
+    } catch (error) {
+      console.error('Failed to refresh token:', error);
+      if (this.shouldForceLogoutOnRefreshFailure(error)) {
+        this.logout();
+        throw new Error(this.getRefreshFailureMessage(error));
+      }
+    }
   }
 
   async currentUser({ token }: { token: string }): Promise<GitHubUser> {
     if (!this._currentUserPromise) {
       this._currentUserPromise = (async () => {
-        // Check if token needs refresh (5 minute buffer)
-        const now = Math.floor(Date.now() / 1000);
-        if (this.supabaseExpiresAt && this.supabaseExpiresAt - now < 300) {
-          try {
-            await this.getRefreshedAccessToken();
-          } catch (error) {
-            console.error('Failed to refresh token:', error);
-            this.logout();
-            throw new Error('Session expired. Please log in again.');
-          }
-        }
+        await this.refreshSessionIfNeeded();
 
-        // Return mocked GitHub user
         const owner = this.originRepo.split('/')[0];
 
         return {
@@ -266,7 +374,6 @@ export default class DecapTurboBackend extends GitHubBackend {
     }
     return this._currentUserPromise!;
   }
-
 
   async getEntry(path: string) {
     const cached = await this.supabase.fetchEntryByPath(path);

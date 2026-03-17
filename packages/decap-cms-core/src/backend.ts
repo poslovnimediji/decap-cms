@@ -127,6 +127,8 @@ export class LocalStorageAuthStore {
   }
 }
 
+const AUTH_STORE_STORAGE_KEY = 'decap-cms-user';
+
 function getEntryBackupKey(collectionName?: string, slug?: string) {
   const baseKey = 'backup';
   if (!collectionName) {
@@ -377,6 +379,19 @@ export class Backend {
   authStore?: AuthStore;
   user?: User | null;
   backupSync: AsyncLock;
+  handleAuthStorageSync = (event: StorageEvent) => {
+    if (!this.authStore || event.key !== AUTH_STORE_STORAGE_KEY) {
+      return;
+    }
+
+    const stored = this.authStore.retrieve();
+    if (stored && stored.backendName === this.backendName) {
+      this.user = stored;
+      return;
+    }
+
+    this.user = null;
+  };
 
   constructor(implementation: Implementation, { backendName, authStore, config }: BackendOptions) {
     // We can't reliably run this on exit, so we do cleanup on load.
@@ -393,6 +408,10 @@ export class Backend {
       throw new Error('Cannot instantiate a Backend with no implementation');
     }
     this.backupSync = asyncLock();
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('storage', this.handleAuthStorageSync);
+    }
   }
 
   async status() {
