@@ -78,8 +78,11 @@ async function init({ options = {}, handleInsert = () => {}, getMediaLibraryCont
     /**
      * Show the media library widget
      */
-    show: ({ allowMultiple = false, imagesOnly = false } = {}) => {
+    show: ({ allowMultiple = false, imagesOnly = false, config: instanceConfig = {} } = {}) => {
       if (isOpen) return;
+
+      const resolvedMultiple =
+        allowMultiple !== false && Boolean(instanceConfig.multiple ?? providedConfig.multiple);
 
       // Create container if it doesn't exist
       if (!widgetContainer) {
@@ -104,7 +107,7 @@ async function init({ options = {}, handleInsert = () => {}, getMediaLibraryCont
           onClose: () => {
             mediaLibraryInstance.hide();
           },
-          allowMultiple,
+          allowMultiple: resolvedMultiple,
           imagesOnly,
         }),
       );
