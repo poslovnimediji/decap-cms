@@ -1,6 +1,16 @@
 import { GitHubBackend } from 'decap-cms-backend-github';
-import { type Config, type User, type Credentials, filterByExtension } from 'decap-cms-lib-util';
+import {
+  type Config,
+  type User,
+  type Credentials,
+  type ApiRequest,
+  filterByExtension,
+  unsentRequest,
+} from 'decap-cms-lib-util';
 import React from 'react';
+import API from 'decap-cms-backend-github/src/API';
+import GraphQLAPI from 'decap-cms-backend-github/src/GraphQLAPI';
+import { stripIndent } from 'common-tags';
 
 import { SupabaseClient } from './supabase';
 import SupabaseAuthenticationPage from './AuthenticationPage';
@@ -66,6 +76,69 @@ export default class DecapTurboBackend extends GitHubBackend {
       this.originRepo,
       this.siteId,
     );
+  }
+
+  async ghFetch(url: string, init: RequestInit = {}) {
+    const accessToken = this.supabaseAccessToken || this.token || '';
+    const headers: Record<string, string> = Object.fromEntries(
+      new Headers(init.headers || {}).entries(),
+    );
+
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    let scopedUrl = url;
+    const isGhProxyRequest = scopedUrl.includes('/functions/v1/gh');
+    if (this.siteId && isGhProxyRequest) {
+      headers['x-site-id'] = this.siteId;
+      const urlObj = new URL(scopedUrl);
+      if (!urlObj.searchParams.has('site_id')) {
+        urlObj.searchParams.set('site_id', this.siteId);
+      }
+      scopedUrl = urlObj.toString();
+    }
+
+    return fetch(scopedUrl, {
+      ...init,
+      headers,
+    });
+  }
+
+  setScopedApiRequestBuilder() {
+    if (!this.api) {
+      return;
+    }
+
+    const originalBuildRequest = this.api.buildRequest.bind(this.api);
+    this.api.buildRequest = (req: ApiRequest) => {
+      const builtRequest = originalBuildRequest(req);
+      if (!this.siteId) {
+        return builtRequest;
+      }
+
+      if (typeof builtRequest === 'string') {
+        const isGhProxyRequest = builtRequest.includes('/functions/v1/gh');
+        if (!isGhProxyRequest) {
+          return builtRequest;
+        }
+        const urlObj = new URL(builtRequest);
+        if (!urlObj.searchParams.has('site_id')) {
+          urlObj.searchParams.set('site_id', this.siteId);
+        }
+        return urlObj.toString();
+      }
+
+      const requestUrl = unsentRequest.toURL(builtRequest);
+      const isGhProxyRequest = requestUrl.includes('/functions/v1/gh');
+      if (!isGhProxyRequest) {
+        return builtRequest;
+      }
+
+      return unsentRequest.withParams({ site_id: this.siteId })(
+        unsentRequest.withHeaders({ 'x-site-id': this.siteId })(builtRequest),
+      );
+    };
   }
 
   async status() {
@@ -148,7 +221,51 @@ export default class DecapTurboBackend extends GitHubBackend {
       await this.setActiveSiteAndRefresh();
     }
 
-    const user = await super.authenticate(state);
+    this.token = state.token as string;
+
+    if (!this.isBranchConfigured) {
+      const repoInfo = await this.ghFetch(`${this.apiRoot}/repos/${this.originRepo}`)
+        .then(res => res.json())
+        .catch(() => null);
+      if (repoInfo && repoInfo.default_branch) {
+        this.branch = repoInfo.default_branch;
+      }
+    }
+
+    const apiCtor = this.useGraphql ? GraphQLAPI : API;
+    this.api = new apiCtor({
+      token: this.token,
+      tokenKeyword: this.tokenKeyword,
+      branch: this.branch,
+      repo: this.repo,
+      originRepo: this.originRepo,
+      apiRoot: this.apiRoot,
+      squashMerges: this.squashMerges,
+      cmsLabelPrefix: this.cmsLabelPrefix,
+      useOpenAuthoring: this.useOpenAuthoring,
+      initialWorkflowStatus: this.options.initialWorkflowStatus,
+      baseUrl: this.baseUrl,
+      getUser: this.currentUser.bind(this),
+    });
+    this.setScopedApiRequestBuilder();
+
+    const user = await this.api!.user();
+    const isCollab = await this.api!.hasWriteAccess().catch(error => {
+      error.message = stripIndent`
+        Repo "${this.repo}" not found.
+
+        Please ensure the repo information is spelled correctly.
+
+        If the repo is private, make sure you're logged into a GitHub account with access.
+
+        If your repo is under an organization, ensure the organization has granted access to Decap CMS.
+      `;
+      throw error;
+    });
+
+    if (!isCollab && !this.bypassWriteAccessCheckForAppTokens) {
+      throw new Error('Your GitHub user account does not have access to this repo.');
+    }
 
     this.api!.commitAuthor = resolveCommitAuthorFromSupabaseUser(
       state as SupabaseUser,
@@ -158,6 +275,8 @@ export default class DecapTurboBackend extends GitHubBackend {
     // Include access_token in the returned user object so it gets stored in auth store
     return {
       ...user,
+      token: state.token as string,
+      useOpenAuthoring: this.useOpenAuthoring,
       ...('access_token' in state && { access_token: state.access_token }),
       ...('refresh_token' in state && { refresh_token: state.refresh_token }),
       ...('expires_at' in state && { expires_at: state.expires_at }),
@@ -166,6 +285,100 @@ export default class DecapTurboBackend extends GitHubBackend {
       ...('email' in state && { email: (state as SupabaseUser).email }),
       ...('user_metadata' in state && { user_metadata: (state as SupabaseUser).user_metadata }),
     };
+  }
+
+  async pollUntilForkExists({ repo }: { repo: string; token: string }) {
+    const pollDelay = 250;
+    let repoExists = false;
+    while (!repoExists) {
+      repoExists = await this.ghFetch(`${this.apiRoot}/repos/${repo}`)
+        .then(() => true)
+        .catch(err => {
+          if (err && err.status === 404) {
+            console.log('This 404 was expected and handled appropriately.');
+            return false;
+          } else {
+            return Promise.reject(err);
+          }
+        });
+      if (!repoExists) {
+        await new Promise(resolve => setTimeout(resolve, pollDelay));
+      }
+    }
+    return Promise.resolve();
+  }
+
+  async userIsOriginMaintainer({ username: usernameArg }: { username?: string; token: string }) {
+    const username = usernameArg || (await this.currentUser({ token: this.token || '' })).login;
+    this._userIsOriginMaintainerPromises = this._userIsOriginMaintainerPromises || {};
+    if (!this._userIsOriginMaintainerPromises[username]) {
+      this._userIsOriginMaintainerPromises[username] = this.ghFetch(
+        `${this.apiRoot}/repos/${this.originRepo}/collaborators/${username}/permission`,
+      )
+        .then(res => res.json())
+        .then(({ permission }) => permission === 'admin' || permission === 'write');
+    }
+    return this._userIsOriginMaintainerPromises[username];
+  }
+
+  async forkExists({ token }: { token: string }) {
+    try {
+      const currentUser = await this.currentUser({ token });
+      const repoName = this.originRepo.split('/')[1];
+      const repo = await this.ghFetch(`${this.apiRoot}/repos/${currentUser.login}/${repoName}`, {
+        method: 'GET',
+      }).then(res => res.json());
+
+      const forkExists =
+        repo.fork === true &&
+        repo.parent &&
+        repo.parent.full_name.toLowerCase() === this.originRepo.toLowerCase();
+      return forkExists;
+    } catch {
+      return false;
+    }
+  }
+
+  async authenticateWithFork({
+    userData,
+    getPermissionToFork,
+  }: {
+    userData: User;
+    getPermissionToFork: () => Promise<boolean> | boolean;
+  }) {
+    if (!this.openAuthoringEnabled) {
+      throw new Error('Cannot authenticate with fork; Open Authoring is turned off.');
+    }
+
+    const token = userData.token as string;
+    this.token = token;
+
+    if (!this.alwaysForkEnabled && (await this.userIsOriginMaintainer({ token }))) {
+      this.repo = this.originRepo;
+      this.useOpenAuthoring = false;
+      return Promise.resolve();
+    }
+
+    const currentUser = await this.currentUser({ token });
+    const repoName = this.originRepo.split('/')[1];
+    this.repo = `${currentUser.login}/${repoName}`;
+    this.useOpenAuthoring = true;
+
+    if (await this.forkExists({ token })) {
+      return this.ghFetch(`${this.apiRoot}/repos/${this.repo}/merge-upstream`, {
+        method: 'POST',
+        body: JSON.stringify({
+          branch: this.branch,
+        }),
+      });
+    } else {
+      await getPermissionToFork();
+
+      const fork = await this.ghFetch(`${this.apiRoot}/repos/${this.originRepo}/forks`, {
+        method: 'POST',
+      }).then(res => res.json());
+      return this.pollUntilForkExists({ repo: fork.full_name, token });
+    }
   }
 
   async setActiveSiteAndRefresh() {

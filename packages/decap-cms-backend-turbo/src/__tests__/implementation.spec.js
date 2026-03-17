@@ -85,4 +85,27 @@ describe('turbo backend supabase session refresh', () => {
     await expect(backend.getRefreshedAccessToken()).rejects.toMatchObject({ isTerminal: true });
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it('scopes gh proxy requests with auth header, x-site-id, and site_id query param', async () => {
+    const backend = new DecapTurboBackend({
+      ...config,
+      backend: {
+        ...config.backend,
+        api_root: 'https://supabase.example/functions/v1/gh',
+        site_id: 'site-123',
+      },
+    });
+    backend.supabaseAccessToken = 'access-123';
+
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+
+    await backend.ghFetch('https://supabase.example/functions/v1/gh/repos/owner/repo');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(url).toBe('https://supabase.example/functions/v1/gh/repos/owner/repo?site_id=site-123');
+    expect(init.headers.Authorization).toBe('Bearer access-123');
+    expect(init.headers['x-site-id']).toBe('site-123');
+  });
+
 });
