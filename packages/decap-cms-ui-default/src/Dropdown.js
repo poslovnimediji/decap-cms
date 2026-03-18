@@ -62,12 +62,16 @@ function StyledMenuItem({ isActive, isCheckedItem = false, ...props }) {
           color: ${isActive ? colors.active : '#313d3e'};
           ${isCheckedItem ? 'display: flex; justify-content: start' : ''};
         }
-        &:hover {
+        &:not([disabled]):hover {
           color: ${colors.active};
           background-color: ${colors.activeBackground};
         }
         &.active {
           text-decoration: underline;
+        }
+        &[disabled] {
+          background-color: ${colors.checkerboardLight};
+          cursor: initial;
         }
       `}
       {...props}
@@ -116,9 +120,18 @@ Dropdown.propTypes = {
   children: PropTypes.node,
 };
 
-function DropdownItem({ label, icon, iconDirection, iconSmall, isActive, onClick, className }) {
+function DropdownItem({
+  label,
+  icon,
+  iconDirection,
+  iconSmall,
+  isActive,
+  onClick,
+  className,
+  disabled,
+}) {
   return (
-    <StyledMenuItem value={onClick} isActive={isActive} className={className}>
+    <StyledMenuItem value={onClick} isActive={isActive} className={className} disabled={disabled}>
       <span>{label}</span>
       {icon ? (
         <MenuItemIconContainer iconSmall={iconSmall}>
@@ -135,6 +148,7 @@ DropdownItem.propTypes = {
   iconDirection: PropTypes.string,
   onClick: PropTypes.func,
   className: PropTypes.string,
+  disabled: PropTypes.bool,
 };
 
 function StyledDropdownCheckbox({ checked, id }) {

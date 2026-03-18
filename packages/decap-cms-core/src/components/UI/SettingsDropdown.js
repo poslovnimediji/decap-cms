@@ -59,7 +59,9 @@ Avatar.propTypes = {
   imageUrl: PropTypes.string,
 };
 
-function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutClick, t }) {
+export function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutClick, t, user }) {
+  const accountLabel = user?.email || '';
+
   return (
     <React.Fragment>
       {isTestRepo && (
@@ -78,7 +80,6 @@ function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutClick, t }
       ) : null}
       <Dropdown
         dropdownTopOverlap="50px"
-        dropdownWidth="100px"
         dropdownPosition="right"
         renderButton={() => (
           <AvatarDropdownButton aria-label={t('ui.settingsDropdown.account')}>
@@ -86,6 +87,7 @@ function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutClick, t }
           </AvatarDropdownButton>
         )}
       >
+        {accountLabel ? <DropdownItem disabled label={accountLabel} /> : null}
         <DropdownItem label={t('ui.settingsDropdown.logOut')} onClick={onLogoutClick} />
       </Dropdown>
     </React.Fragment>
@@ -98,6 +100,12 @@ SettingsDropdown.propTypes = {
   imageUrl: PropTypes.string,
   onLogoutClick: PropTypes.func.isRequired,
   t: PropTypes.func.isRequired,
+  user: PropTypes.shape({
+    backendName: PropTypes.string,
+    email: PropTypes.string,
+    login: PropTypes.string,
+    name: PropTypes.string,
+  }),
 };
 
 export default translate()(SettingsDropdown);

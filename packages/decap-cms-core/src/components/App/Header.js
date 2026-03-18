@@ -251,6 +251,7 @@ class Header extends React.Component {
               isTestRepo={isTestRepo}
               imageUrl={user?.avatar_url}
               onLogoutClick={onLogoutClick}
+              user={user}
             />
           </AppHeaderActions>
         </AppHeaderContent>

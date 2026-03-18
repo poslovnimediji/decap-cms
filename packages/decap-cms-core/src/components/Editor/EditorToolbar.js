@@ -681,6 +681,7 @@ export class EditorToolbar extends React.Component {
             displayUrl={displayUrl}
             imageUrl={user?.avatar_url}
             onLogoutClick={onLogoutClick}
+            user={user}
           />
         </ToolbarSectionMeta>
       </ToolbarContainer>
