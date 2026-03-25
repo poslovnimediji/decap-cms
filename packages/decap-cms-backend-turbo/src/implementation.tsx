@@ -467,7 +467,10 @@ export default class DecapTurboBackend extends GitHubBackend {
       const refreshError = new Error('Failed to refresh Supabase token') as SupabaseRefreshError;
       refreshError.status = response.status;
       refreshError.code = errorBody?.error_code || errorBody?.error;
-      refreshError.isTerminal = this.isTerminalRefreshFailure(refreshError.status, refreshError.code);
+      refreshError.isTerminal = this.isTerminalRefreshFailure(
+        refreshError.status,
+        refreshError.code,
+      );
       throw refreshError;
     }
 
@@ -506,7 +509,9 @@ export default class DecapTurboBackend extends GitHubBackend {
         } catch (error) {
           const refreshError = error as SupabaseRefreshError;
           if (typeof refreshError.isTerminal !== 'boolean') {
-            refreshError.isTerminal = this.isOffline() ? false : !this.isRetryableStatus(refreshError.status);
+            refreshError.isTerminal = this.isOffline()
+              ? false
+              : !this.isRetryableStatus(refreshError.status);
           }
 
           lastError = refreshError;
@@ -651,5 +656,9 @@ export default class DecapTurboBackend extends GitHubBackend {
     });
 
     return entries;
+  }
+
+  async entriesByFolder(folder: string, extension: string, depth: number) {
+    return this.allEntriesByFolder(folder, extension, depth);
   }
 }
