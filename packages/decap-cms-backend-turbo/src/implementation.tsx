@@ -240,4 +240,8 @@ export default class DecapTurboBackend extends GitHubBackend {
 
     return entries;
   }
+
+  async entriesByFolder(folder: string, extension: string, depth: number) {
+    return this.allEntriesByFolder(folder, extension, depth);
+  }
 }
