@@ -51,7 +51,7 @@ function MultiValue(props) {
 
   const innerProps = { ...props.innerProps, onMouseDown };
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} title={props.data.label}>
       <components.MultiValue {...props} innerProps={innerProps} />
     </div>
   );
@@ -63,7 +63,16 @@ function MultiValueLabel(props) {
   });
 
   return (
-    <div {...attributes} {...listeners}>
+    <div
+      {...attributes}
+      {...listeners}
+      style={{
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        maxWidth: '300px',
+      }}
+    >
       <components.MultiValueLabel {...props} />
     </div>
   );
@@ -106,7 +115,14 @@ function SortableSelect(props) {
 }
 
 function Option({ index, style, data }) {
-  return <div style={style}>{data.options[index]}</div>;
+  const option = data.options[index];
+  const label = option.props.label || (option.props.data && option.props.data.label) || '';
+
+  return (
+    <div style={style} title={typeof label === 'string' ? label : ''}>
+      {option}
+    </div>
+  );
 }
 
 function MenuList(props) {
@@ -483,6 +499,16 @@ export default class RelationControl extends React.Component {
       isMultiple,
     });
 
+    const customStyles = {
+      ...reactSelectStyles,
+      option: (provided, state) => ({
+        ...reactSelectStyles.option(provided, state),
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }),
+    };
+
     return (
       <SortableSelect
         useDragHandle
@@ -499,7 +525,7 @@ export default class RelationControl extends React.Component {
         className={classNameWrapper}
         onFocus={setActiveStyle}
         onBlur={setInactiveStyle}
-        styles={reactSelectStyles}
+        styles={customStyles}
         isMulti={isMultiple}
         isClearable={isClearable}
         placeholder=""
