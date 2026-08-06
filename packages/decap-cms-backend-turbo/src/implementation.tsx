@@ -1,13 +1,5 @@
 import { GitHubBackend } from 'decap-cms-backend-github';
-import {
-  type Config,
-  type User,
-  type Credentials,
-  type ApiRequest,
-  filterByExtension,
-  unsentRequest,
-} from 'decap-cms-lib-util';
-import React from 'react';
+import { type Config, type User, type Credentials, filterByExtension } from 'decap-cms-lib-util';
 import API from 'decap-cms-backend-github/src/API';
 import GraphQLAPI from 'decap-cms-backend-github/src/GraphQLAPI';
 import { stripIndent } from 'common-tags';
@@ -115,7 +107,7 @@ export default class DecapTurboBackend extends GitHubBackend {
       ((config.backend as Record<string, unknown>).commit_author_email as string | undefined) ||
       ((config.backend as Record<string, unknown>).noreply_email as string | undefined);
 
-    this.updateUserCredentials = options.updateUserCredentials || (() => {});
+    this.updateUserCredentials = options.updateUserCredentials || (() => undefined);
 
     this.bypassWriteAccessCheckForAppTokens = true;
     this.tokenKeyword = 'Bearer';
@@ -161,34 +153,28 @@ export default class DecapTurboBackend extends GitHubBackend {
       return;
     }
 
-    const originalBuildRequest = this.api.buildRequest.bind(this.api);
-    this.api.buildRequest = (req: ApiRequest) => {
-      const builtRequest = originalBuildRequest(req);
-      if (!this.siteId) {
-        return builtRequest;
-      }
+    const isGhProxyApiRoot = this.apiRoot.includes('/functions/v1/gh');
 
-      if (typeof builtRequest === 'string') {
-        const isGhProxyRequest = builtRequest.includes('/functions/v1/gh');
-        if (!isGhProxyRequest) {
-          return builtRequest;
-        }
-        const urlObj = new URL(builtRequest);
-        if (!urlObj.searchParams.has('site_id')) {
-          urlObj.searchParams.set('site_id', this.siteId);
-        }
-        return urlObj.toString();
+    const originalUrlFor = this.api.urlFor.bind(this.api);
+    this.api.urlFor = (path: string, options: any) => {
+      const builtUrl = originalUrlFor(path, options);
+      if (!this.siteId || !isGhProxyApiRoot) {
+        return builtUrl;
       }
-
-      const requestUrl = unsentRequest.toURL(builtRequest);
-      const isGhProxyRequest = requestUrl.includes('/functions/v1/gh');
-      if (!isGhProxyRequest) {
-        return builtRequest;
+      const urlObj = new URL(builtUrl);
+      if (!urlObj.searchParams.has('site_id')) {
+        urlObj.searchParams.set('site_id', this.siteId);
       }
+      return urlObj.toString();
+    };
 
-      return unsentRequest.withParams({ site_id: this.siteId })(
-        unsentRequest.withHeaders({ 'x-site-id': this.siteId })(builtRequest),
-      );
+    const originalRequestHeaders = this.api.requestHeaders.bind(this.api);
+    this.api.requestHeaders = async (headers: Record<string, string> = {}) => {
+      const builtHeaders = await originalRequestHeaders(headers);
+      if (!this.siteId || !isGhProxyApiRoot) {
+        return builtHeaders;
+      }
+      return { ...builtHeaders, 'x-site-id': this.siteId };
     };
   }
 
