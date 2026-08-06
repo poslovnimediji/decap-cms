@@ -42,7 +42,56 @@ type SupabaseRefreshError = Error & {
 const REFRESH_BUFFER_SECONDS = 300;
 const REFRESH_RETRY_ATTEMPTS = 3;
 
+// Shared control-plane values (supabase_app_id, supabase_anon_key, base_url,
+// api_root) are identical across every site, so a site's config.yml only
+// needs `turbo_site_id`. This is resolved here, in this backend's own code,
+// rather than in decap-cms-core — core has no knowledge of Supabase or
+// Turbo at all; it just awaits this static `preloadConfig` hook (a generic
+// extension point) before constructing the backend.
+const DEFAULT_CONFIG_ENDPOINT = 'https://sb.decapcms.org/functions/v1/config';
+
 export default class DecapTurboBackend extends GitHubBackend {
+  static async preloadConfig(config: Config): Promise<Config> {
+    const backend = config.backend as Record<string, unknown>;
+    const isFullyManuallyConfigured = Boolean(backend.supabase_app_id && backend.supabase_anon_key);
+    if (isFullyManuallyConfigured) {
+      return config;
+    }
+
+    if (backend.supabase_app_id && !backend.supabase_anon_key) {
+      // Half-manual config: `supabase_app_id` alone is not a usable anon key,
+      // so failing loudly here beats the constructor silently falling back
+      // to treating the project ref as the anon key.
+      throw new Error(
+        "decap-turbo config error: 'supabase_app_id' is set without 'supabase_anon_key'. " +
+          "Provide both to configure manually, or provide only 'turbo_site_id' to fetch " +
+          'both from the control plane.',
+      );
+    }
+
+    if (!backend.turbo_site_id) {
+      // Nothing to resolve and nothing manually configured.
+      return config;
+    }
+
+    const endpoint = (backend.turbo_config_url as string) || DEFAULT_CONFIG_ENDPOINT;
+    const response = await fetch(
+      `${endpoint}?site_id=${encodeURIComponent(backend.turbo_site_id as string)}`,
+    );
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(`Failed to load decap-turbo site defaults: ${body.error || response.status}`);
+    }
+
+    const defaults = await response.json();
+
+    return {
+      ...config,
+      backend: { ...defaults, ...config.backend },
+    };
+  }
+
   supabaseAccessToken: string | null = null;
   supabaseRefreshToken: string | null = null;
   supabaseExpiresAt: number | null = null;
@@ -57,9 +106,11 @@ export default class DecapTurboBackend extends GitHubBackend {
 
   constructor(config: Config, options: any = {}) {
     super(config, options);
-    this.supabaseAnonKey = (config.backend.anon_key || config.backend.app_id || '') as string;
-    this.supabaseId = (config.backend.app_id || '') as string;
-    this.siteId = (config.backend.site_id || '') as string;
+    this.supabaseAnonKey = (config.backend.supabase_anon_key ||
+      config.backend.supabase_app_id ||
+      '') as string;
+    this.supabaseId = (config.backend.supabase_app_id || '') as string;
+    this.siteId = (config.backend.turbo_site_id || '') as string;
     this.commitAuthorEmailFallback =
       ((config.backend as Record<string, unknown>).commit_author_email as string | undefined) ||
       ((config.backend as Record<string, unknown>).noreply_email as string | undefined);
@@ -272,6 +323,14 @@ export default class DecapTurboBackend extends GitHubBackend {
       this.commitAuthorEmailFallback,
     );
 
+    // Only knowable post-auth (the `config` bootstrap endpoint's static
+    // preloadConfig hook runs before a user JWT exists), so it's fetched
+    // here and attached to the returned user rather than resolved earlier.
+    // decap-cms-core's actions/auth.ts picks up `permissions` off this object
+    // generically (the field name is backend-neutral by design — any backend
+    // could set it) and re-filters the loaded config against it.
+    const turboPermissions = await this.fetchTurboPermissions();
+
     // Include access_token in the returned user object so it gets stored in auth store
     return {
       ...user,
@@ -284,7 +343,34 @@ export default class DecapTurboBackend extends GitHubBackend {
       ...('user_email' in state && { user_email: (state as SupabaseUser).user_email }),
       ...('email' in state && { email: (state as SupabaseUser).email }),
       ...('user_metadata' in state && { user_metadata: (state as SupabaseUser).user_metadata }),
+      ...(turboPermissions && { permissions: turboPermissions }),
     };
+  }
+
+  async fetchTurboPermissions(): Promise<{ collections?: Record<string, string> } | undefined> {
+    if (!this.supabaseAccessToken || !this.siteId) {
+      return undefined;
+    }
+
+    try {
+      const res = await fetch(
+        `${this.baseUrl}/functions/v1/permissions?site_id=${encodeURIComponent(this.siteId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.supabaseAccessToken}`,
+            apikey: this.supabaseAnonKey,
+          },
+        },
+      );
+      if (!res.ok) {
+        console.warn('Failed to fetch Turbo site permissions', res.status);
+        return undefined;
+      }
+      return await res.json();
+    } catch (error) {
+      console.warn('Failed to fetch Turbo site permissions', error);
+      return undefined;
+    }
   }
 
   async pollUntilForkExists({ repo }: { repo: string; token: string }) {

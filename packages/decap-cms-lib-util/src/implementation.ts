@@ -168,12 +168,16 @@ export type Config = {
     auth_type?: string;
     app_id?: string;
     site_id?: string;
-    anon_key?: string;
     base_url?: string;
     auth_endpoint?: string;
     cms_label_prefix?: string;
     api_version?: string;
     status_endpoint?: string;
+    // decap-turbo backend
+    turbo_site_id?: string;
+    turbo_config_url?: string;
+    supabase_app_id?: string;
+    supabase_anon_key?: string;
   };
   auth: {
     use_oidc?: boolean;
