@@ -46,15 +46,21 @@ async function moveFile(from: string, to: string) {
   await fs.rename(from, to);
 }
 
-export async function move(from: string, to: string, isFolder?: boolean) {
+export async function move(
+  from: string,
+  to: string,
+  hasSubfolders = true,
+  isFolder?: boolean,
+) {
   // move file
   await moveFile(from, to);
 
-  if (isFolder === false) {
+  if (!hasSubfolders || isFolder === false) {
     return;
   }
 
-  // move children
+  // Legacy behavior (subfolders: true, default): move all files in the directory
+  // This is for collections where all files in a folder represent a single entry
   const sourceDir = path.dirname(from);
   const destDir = path.dirname(to);
   const allFiles = await listFiles(sourceDir, '', 100);

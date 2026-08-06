@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { KEYS } from 'platejs';
 import { usePlateEditor, Plate, ParagraphPlugin, PlateLeaf } from 'platejs/react';
 import {
@@ -8,7 +8,6 @@ import {
   CodePlugin,
   HeadingPlugin,
 } from '@platejs/basic-nodes/react';
-import { ListPlugin } from '@platejs/list-classic/react';
 import { LinkPlugin } from '@platejs/link/react';
 import { ClassNames, css } from '@emotion/react';
 import { fonts, lengths, zIndex } from 'decap-cms-ui-default';
@@ -25,12 +24,17 @@ import HeadingElement from './components/Element/HeadingElement';
 import ListElement from './components/Element/ListElement';
 import BlockquoteElement from './components/Element/BlockquoteElement';
 import LinkElement from './components/Element/LinkElement';
+import ImageElement from './components/Element/ImageElement';
 import ExtendedBlockquotePlugin from './plugins/ExtendedBlockquotePlugin';
+import ImagePlugin from './plugins/ImagePlugin';
+import ListPlugin from './plugins/ListPlugin';
+import BreakPlugin from './plugins/BreakPlugin';
 import ShortcodePlugin from './plugins/ShortcodePlugin';
 import { TablePlugin, TableRowPlugin, TableCellPlugin } from './plugins/TablePlugin';
 import defaultEmptyBlock from './defaultEmptyBlock';
 import { mergeMediaConfig } from './mergeMediaConfig';
 import { handleLinkClick } from './linkHandler';
+import { handlePasteHtml } from './pasteHandler';
 
 function editorStyles({ minimal }) {
   return css`
@@ -54,10 +58,12 @@ export default function VisualEditor(props) {
     field,
     className,
     isDisabled,
+    isEditorComponent,
     onMode,
     isShowModeToggle,
     onChange,
     getEditorComponents,
+    getAsset,
   } = props;
 
   let editorComponents = getEditorComponents();
@@ -83,6 +89,10 @@ export default function VisualEditor(props) {
     onChange(mdValue);
   }
 
+  function handlePaste(event) {
+    handlePasteHtml({ event, editor, isDisabled });
+  }
+
   const initialValue = props.value
     ? markdownToSlate(props.value, { editorComponents, voidCodeBlock: !!codeBlockComponent })
     : emptyValue;
@@ -104,6 +114,8 @@ export default function VisualEditor(props) {
         ['ul']: withProps(ListElement, { variant: 'ul' }),
         ['ol']: withProps(ListElement, { variant: 'ol' }),
         ['li']: withProps(ListElement, { variant: 'li' }),
+        ['blockquote']: BlockquoteElement,
+        ['image']: withProps(ImageElement, { getAsset, field }),
       },
     },
     plugins: [
@@ -127,6 +139,8 @@ export default function VisualEditor(props) {
         shortcuts: { toggle: { keys: 'mod+shift+c' } },
       }),
       ListPlugin,
+      BreakPlugin,
+      ImagePlugin,
       LinkPlugin.configure({
         node: { component: LinkElement },
         shortcuts: {
@@ -175,12 +189,13 @@ export default function VisualEditor(props) {
                 editorComponents={editorComponents}
                 allowedEditorComponents={field.get('editor_components')}
                 isShowModeToggle={isShowModeToggle}
+                isEditorComponent={isEditorComponent}
                 t={t}
                 disabled={isDisabled}
               />
             </EditorControlBar>
             <div css={editorStyles({ minimal: field.get('minimal') })}>
-              <Editor isDisabled={isDisabled} />
+              <Editor isDisabled={isDisabled} onPaste={handlePaste} />
             </div>
           </Plate>
         </div>

@@ -1,4 +1,3 @@
-import React from 'react';
 import PropTypes from 'prop-types';
 import { WidgetPreviewContainer } from 'decap-cms-ui-default';
 import ImmutablePropTypes from 'react-immutable-proptypes';
@@ -22,9 +21,49 @@ function RichtextPreview({
     { getAsset, resolveWidget, editorComponents: getEditorComponents?.() },
     getRemarkPlugins?.(),
   );
-  const toRender = field?.get('sanitize_preview', false) ? DOMPurify.sanitize(html) : html;
+  const shouldSanitizePreview = field?.get('sanitize_preview') ?? true;
+  const toRender = shouldSanitizePreview ? DOMPurify.sanitize(html) : html;
 
-  return <WidgetPreviewContainer dangerouslySetInnerHTML={{ __html: toRender }} />;
+  // Inject block-specific styles into the iframe
+  const previewStyles = `
+    blockquote {
+      padding-left: 16px;
+      border-left: 3px solid #eff0f4;
+      margin-left: 0;
+      margin-right: 0;
+      margin-bottom: 16px;
+    }
+    
+    code {
+      background-color: #eff0f4;
+      border-radius: 5px;
+      padding: 0 2px;
+      font-size: 85%;
+      
+    }
+    
+    pre {
+      background-color: #eff0f4;
+      border-radius: 5px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+    
+    pre code {
+      background-color: transparent;
+      padding: 0;
+      font-size: 85%;
+      border-radius: 0;
+    }
+  `;
+
+  return (
+    <WidgetPreviewContainer>
+      <style>{previewStyles}</style>
+      <div dangerouslySetInnerHTML={{ __html: toRender }} />
+    </WidgetPreviewContainer>
+  );
 }
 
 RichtextPreview.propTypes = {

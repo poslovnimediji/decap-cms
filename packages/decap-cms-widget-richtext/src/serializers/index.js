@@ -7,6 +7,7 @@ import remarkToRehype from 'remark-rehype';
 import rehypeToHtml from 'rehype-stringify';
 import htmlToRehype from 'rehype-parse';
 import rehypeToRemark from 'rehype-remark';
+import rehypeRemoveComments from 'rehype-remove-comments';
 import { Map } from 'immutable';
 
 import remarkToRehypeShortcodes from './remarkRehypeShortcodes';
@@ -161,8 +162,23 @@ export function markdownToHtml(
 ) {
   const mdast = markdownToRemark(markdown, remarkPlugins, editorComponents);
 
+  /**
+   * Provide a `toHtml` callback that `remarkToRehypeShortcodes` can use to
+   * convert markdown/richtext sub-field values to HTML (e.g. the inner content
+   * of container editor components). This avoids a circular import while
+   * letting the shortcode preview pipeline recursively render nested markdown.
+   */
+  function toHtml(md) {
+    return markdownToHtml(md, { getAsset, resolveWidget, editorComponents });
+  }
+
   const hast = unified()
-    .use(remarkToRehypeShortcodes, { plugins: editorComponents, getAsset, resolveWidget })
+    .use(remarkToRehypeShortcodes, {
+      plugins: editorComponents,
+      getAsset,
+      resolveWidget,
+      toHtml,
+    })
     .use(remarkToRehype, { allowDangerousHTML: true })
     .runSync(mdast);
 
@@ -187,6 +203,7 @@ export function htmlToSlate(html) {
 
   const mdast = unified()
     .use(rehypePaperEmoji)
+    .use(rehypeRemoveComments, { removeConditional: true })
     .use(rehypeToRemark, { minify: false })
     .runSync(hast);
 

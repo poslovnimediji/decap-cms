@@ -1,195 +1,301 @@
 backend:
-  name: decap-turbo
-  repo: poslovnimediji/cmt-sites
-  branch: main
+  name: test-repo
 
-  # Supabase db settings
-  app_id: pujtvbcombndovjjlsmz
-  site_id: aa0d4596-c6f7-4f66-afd9-8aa134999e35
-  anon_key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1anR2YmNvbWJuZG92ampsc216Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTEzMDQsImV4cCI6MjA4ODg4NzMwNH0.7ESrurfjNH4cB1dk6GsN_VZ4cXjujMWbHuF1KC5RL08
+site_url: https://example.com
 
-  # Supabase auth settings
-  base_url: https://pujtvbcombndovjjlsmz.supabase.co
-  api_root: https://pujtvbcombndovjjlsmz.supabase.co/functions/v1/gh
-  auth_endpoint: auth/v1/authorize
-  auth_token_endpoint: auth/v1/token
-  squash_merges: true
+publish_mode: editorial_workflow
+media_folder: assets/uploads
 
-  # Cloudflare Pages OAuth settings
-  # auth_endpoint: /api/auth
-  # base_url: https://cmt-docs.pages.dev
-
-display_url: https://cmt-docs.pages.dev/
-site_url: https://cmt-docs.pages.dev/
-
-media_folder: docs/static
-public_folder: /docs
-
-media_library:
-  name: bunny
-  config:
-    storage_zone_name: cmt-docs
-    cdn_url_prefix: https://cmt-docs-cdn.b-cdn.net
-
-slug:
-  encoding: ascii
-  clean_accents: true
-
-editor:
-  preview: false
-
-aliases:
-  - &TITLE {name: title, label: Title, widget: string}
-  - &DESCRIPTION {name: description, label: Description, widget: text, required: false}
-  - &WEIGHT {name: weight, label: Weight, widget: number, required: false}
-  - &BODY {name: body, label: Body, widget: markdown, required: false}
-  - &IMAGE_OBJECT {name: image, label: Image, widget: object, required: false, fields: [
-      {name: src, label: Src, widget: image, required: false},
-      {name: alt, label: Alt, widget: string, required: false}
-    ]}
-  - &BUTTON_FIELDS [
-      {name: label, label: Label, widget: string, required: false},
-      {name: href, label: Href, widget: string, required: false}
-    ]
-  - &PRODUCT_HERO { name: hero, label: Product hero, widget: object, required: false, i18n: true, fields: [
-      {name: autoplayMs, label: Autoplay (ms), widget: number, required: false, i18n: true, value_type: int},
-      {name: pauseOnHover, label: Pause on hover, widget: boolean, required: false, i18n: true, default: true},
-      {name: slides,
-        label: Slides,
-        widget: list,
-        required: false,
-        i18n: true,
-        summary: "{{fields.title}}",
-        fields: [
-          *IMAGE_OBJECT,
-          {name: eyebrow, label: Eyebrow, widget: string, required: false, i18n: true},
-          {name: title, label: Title, widget: string, required: false, i18n: true},
-          {name: text, label: Text, widget: markdown, required: false, i18n: true},
-          {name: primaryButton, label: Primary Button, widget: object, required: false, i18n: true, fields: *BUTTON_FIELDS},
-          {name: secondaryButton, label: Secondary Button, widget: object, required: false, i18n: true, fields: *BUTTON_FIELDS},
-          {name: banner,
-            label: Banner,
-            widget: object,
-            required: false,
-            i18n: true,
-            fields: [
-              {name: title, label: Title, widget: string, required: false, i18n: true},
-              {name: text, label: Text, widget: text, required: false, i18n: true},
-              {name: href, label: Href, widget: string, required: false, i18n: true},
-          ]},
-      ]}
-    ]}
-
-collections:
-  - name: general
-    label: General
-    label_singular: General page
-    folder: docs/content/general
-    create: true
-    slug: "{{slug}}"
-    index_file:
-      pattern: _index
-      fields:
-        - *TITLE
-        - *DESCRIPTION
-        - *BODY
-    fields:
-      - *TITLE
-      - *WEIGHT
-      - *BODY
-
-  - name: components
-    label: Components
-    label_singular: Component page
-    folder: docs/content/components
-    create: true
-    slug: "{{slug}}"
-    index_file:
-      pattern: _index
-      fields:
-        - *TITLE
-        - *DESCRIPTION
-        - *BODY
-    fields:
-      - *TITLE
-      - *DESCRIPTION
-      - {name: figmaId, label: Figma ID, widget: string, required: false}
-      - {name: githubIssueId, label: GitHub Issue ID, widget: create-github-issue, required: false}
-      - *WEIGHT
-      - name: properties
-        label: Properties
-        label_singular: Property
-        widget: list
+collections: # A list of collections the CMS should be able to edit
+  - name: 'posts' # Used in routes, ie.: /admin/collections/:slug/edit
+    label: 'Posts' # Used in the UI
+    label_singular: 'Post' # Used in the UI, ie: "New Post"
+    description: >
+      The description is a great place for tone setting, high level information, and editing
+      guidelines that are specific to a collection.
+    folder: '_posts'
+    slug: '{{year}}-{{month}}-{{day}}-{{slug}}'
+    summary: '{{title}} -- {{year}}/{{month}}/{{day}}'
+    create: true # Allow users to create new documents in this collection
+    editor:
+      visualEditing: true
+    sortable_fields:
+      - title
+      - { field: date, default_sort: desc }
+    view_filters:
+      - label: Posts With Index
+        field: title
+        pattern: 'This is post #'
+      - label: Posts Without Index
+        field: title
+        pattern: front matter post
+      - label: Relation Test
+        field: relation_test
+        pattern: true
+    view_groups:
+      - label: Year
+        field: date
+        pattern: \d{4}
+      - label: Relation Test
+        field: relation_test
+    fields: # The fields each document in this collection have
+      - { label: 'Title', name: 'title', widget: 'string', tagname: 'h1' }
+      - { label: 'Relation Test', name: 'relation_test', widget: 'hidden', default: true }
+      - {
+          label: 'Publish Date',
+          name: 'date',
+          widget: 'datetime',
+          format: 'YYYY-MM-DD HH:mm',
+          default: '{{now}}',
+        }
+      - label: 'Cover Image'
+        name: 'image'
+        widget: 'image'
         required: false
-        fields:
-          - {name: name, label: Property Name, widget: string}
-          - {name: type, label: 'Type (e.g., Variant, Boolean)', widget: string, required: false}
-          - {name: default, label: Default value, widget: string, required: false}
-          - name: values
-            label: Values
-            label_singular: Value
-            widget: list
-            required: false
-            fields:
-              - {name: name, label: Value Name, widget: string}
-              - {name: image, label: Image, widget: image, required: false}
-      - name: scenarios
-        label: Scenarios
-        label_singular: Scenario
-        widget: list
-        required: false
-        fields:
-          - {name: role, label: Role (e.g., system, editor, user), widget: string}
-          - {name: scenario, label: Scenario Name, widget: string}
-          - *DESCRIPTION
-      - *BODY
+        tagname: ''
 
-  - name: layouts
-    label: Layouts
-    label_singular: Layout page
-    folder: docs/content/layouts
-    create: true
-    slug: "{{slug}}"
-    index_file:
-      pattern: _index
-      fields:
-        - *TITLE
-        - *DESCRIPTION
-        - *BODY
-    fields:
-      - *TITLE
-      - *DESCRIPTION
-      - {name: figmaId, label: Figma ID, widget: string, required: false}
-      - {name: githubIssueId, label: GitHub Issue ID, widget: create-github-issue, required: false}
-      - *WEIGHT
-      - {name: image, label: Image, widget: image, required: false}
-      - name: components
-        label: Components
-        label_singular: Component
-        widget: list
-        required: false
-        fields:
-          - {name: name, label: Component Name, widget: string}
-          - {name: mode, label: 'Mode (e.g., global, fixed, module)', widget: string}
-      - *BODY
+      - { label: 'Body', name: 'body', widget: 'richtext', hint: 'Main content goes here.' }
+      - { label: 'Body', name: 'bodyold', widget: 'markdown', hint: 'Main content goes here.' }
+      - { label: 'Body', name: 'bodyold2', widget: 'markdown', hint: 'Main content goes here 2.' }
 
-  - name: pages-config
-    label: Pages & Config
+  - name: 'restaurants' # Used in routes, ie.: /admin/collections/:slug/edit
+    label: 'Restaurants' # Used in the UI
+    label_singular: 'Restaurant' # Used in the UI, ie: "New Post"
+    description: >
+      Restaurants is an entry type used for testing galleries, relations and other widgets.
+      The tests must be written in such way that adding new fields does not affect previous flows.
+    folder: '_restaurants'
+    slug: '{{year}}-{{month}}-{{day}}-{{slug}}'
+    summary: '{{title}} -- {{year}}/{{month}}/{{day}}'
+    create: true # Allow users to create new documents in this collection
+    editor:
+      visualEditing: true
+    fields: # The fields each document in this collection have
+      - { label: 'Title', name: 'title', widget: 'string', tagname: 'h1' }
+      - { label: 'Body', name: 'body', widget: 'markdown', hint: 'Main content goes here.' }
+      - { name: 'gallery', widget: 'image', choose_url: true, media_library: {config: {multiple: true, max_files: 999}}}
+      - name: post
+        widget: relation
+        collection: posts
+        multiple: true
+        search_fields: ['title']
+        display_fields: ['title']
+        value_field: '{{slug}}'
+        filters:
+          - field: relation_test
+            values: [true]
+      - name: authors
+        label: Authors
+        label_singular: 'Author'
+        widget: list
+        fields:
+          - { label: 'Name', name: 'name', widget: 'string', hint: 'First and Last' }
+          - { label: 'Description', name: 'description', widget: 'markdown' }
+
+  - name: 'faq' # Used in routes, ie.: /admin/collections/:slug/edit
+    label: 'FAQ' # Used in the UI
+    folder: '_faqs'
+    create: true # Allow users to create new documents in this collection
+    fields: # The fields each document in this collection have
+      - { label: 'Question', name: 'title', widget: 'string', tagname: 'h1' }
+      - { label: 'Answer', name: 'body', widget: 'markdown' }
+
+  - name: 'settings'
+    label: 'Settings'
+    delete: false # Prevent users from deleting documents in this collection
+    editor:
+      preview: false
     files:
-      - label: Home Page
-        name: home
-        file: docs/content/_index.md
+      - name: 'general'
+        label: 'Site Settings'
+        file: '_data/settings.json'
+        description: 'General Site Settings'
         fields:
-          - *TITLE
-          - *DESCRIPTION
-          - *BODY
-      - label: Print Page
-        name: print
-        file: docs/content/print.md
+          - { label: 'Global title', name: 'site_title', widget: 'string' }
+          - label: 'Post Settings'
+            name: posts
+            widget: 'object'
+            fields:
+              - {
+                  label: 'Number of posts on frontpage',
+                  name: front_limit,
+                  widget: number,
+                  min: 1,
+                  max: 10,
+                }
+              - { label: 'Default Author', name: author, widget: string }
+              - {
+                  label: 'Default Thumbnail',
+                  name: thumb,
+                  widget: image,
+                  class: 'thumb',
+                  required: false,
+                }
+
+      - name: 'authors'
+        label: 'Authors'
+        file: '_data/authors.yml'
+        description: 'Author descriptions'
         fields:
-          - *TITLE
-      - label: Config
-        name: config
-        file: content/docs.toml
+          - name: authors
+            label: Authors
+            label_singular: 'Author'
+            widget: list
+            fields:
+              - { label: 'Name', name: 'name', widget: 'string', hint: 'First and Last' }
+              - { label: 'Description', name: 'description', widget: 'markdown' }
+
+  - name: 'kitchenSink' # all the things in one entry, for documentation and quick testing
+    label: 'Kitchen Sink'
+    folder: '_sink'
+    create: true
+    fields:
+      - label: 'Related Post'
+        name: 'post'
+        widget: 'relationKitchenSinkPost'
+        collection: 'posts'
+        display_fields: ['title', 'datetime']
+        search_fields: ['title', 'body']
+        value_field: 'title'
+      - { label: 'Title', name: 'title', widget: 'string' }
+      - { label: 'ID', name: 'uuid', widget: 'uuid', read_only: true, prefix: '', use_b32_encoding: false }
+      - { label: 'Boolean', name: 'boolean', widget: 'boolean', default: true }
+      - { label: 'Map', name: 'map', widget: 'map' }
+      - { label: 'Text', name: 'text', widget: 'text', hint: 'Plain text, not markdown' }
+      - { label: 'Number', name: 'number', widget: 'number', hint: 'To infinity and beyond!' }
+      - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+      - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+      - { label: 'Image', name: 'image', widget: 'image' }
+      - { label: 'File', name: 'file', widget: 'file' }
+      - { label: 'Select', name: 'select', widget: 'select', options: ['a', 'b', 'c'] }
+      - {
+          label: 'Select multiple',
+          name: 'select_multiple',
+          widget: 'select',
+          options: ['a', 'b', 'c'],
+          multiple: true,
+        }
+      - { label: 'Hidden', name: 'hidden', widget: 'hidden', default: 'hidden' }
+      - { label: 'Color', name: 'color', widget: 'color' }
+      - label: 'Object'
+        name: 'object'
+        widget: 'object'
+        collapsed: true
         fields:
-          - *TITLE
+          - label: 'Related Post'
+            name: 'post'
+            widget: 'relationKitchenSinkPost'
+            collection: 'posts'
+            search_fields: ['title', 'body']
+            value_field: 'title'
+          - { label: 'String', name: 'string', widget: 'string' }
+          - { label: 'Boolean', name: 'boolean', widget: 'boolean', default: false }
+          - { label: 'Text', name: 'text', widget: 'text' }
+          - { label: 'Number', name: 'number', widget: 'number' }
+          - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+          - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+          - { label: 'Image', name: 'image', widget: 'image' }
+          - { label: 'File', name: 'file', widget: 'file' }
+          - { label: 'Select', name: 'select', widget: 'select', options: ['a', 'b', 'c'] }
+      - label: 'List'
+        name: 'list'
+        widget: 'list'
+        fields:
+          - { label: 'String', name: 'string', widget: 'string' }
+          - { label: 'Boolean', name: 'boolean', widget: 'boolean' }
+          - { label: 'Text', name: 'text', widget: 'text' }
+          - { label: 'Number', name: 'number', widget: 'number' }
+          - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+          - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+          - { label: 'Image', name: 'image', widget: 'image' }
+          - { label: 'File', name: 'file', widget: 'file' }
+          - { label: 'Select', name: 'select', widget: 'select', options: ['a', 'b', 'c'] }
+          - label: 'Object'
+            name: 'object'
+            widget: 'object'
+            fields:
+              - { label: 'String', name: 'string', widget: 'string' }
+              - { label: 'Boolean', name: 'boolean', widget: 'boolean' }
+              - { label: 'Text', name: 'text', widget: 'text' }
+              - { label: 'Number', name: 'number', widget: 'number' }
+              - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+              - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+              - { label: 'Image', name: 'image', widget: 'image' }
+              - { label: 'File', name: 'file', widget: 'file' }
+              - { label: 'Select', name: 'select', widget: 'select', options: ['a', 'b', 'c'] }
+              - label: 'List'
+                name: 'list'
+                widget: 'list'
+                fields:
+                  - label: 'Related Post'
+                    name: 'post'
+                    widget: 'relationKitchenSinkPost'
+                    collection: 'posts'
+                    search_fields: ['title', 'body']
+                    value_field: 'title'
+                  - { label: 'String', name: 'string', widget: 'string' }
+                  - { label: 'Boolean', name: 'boolean', widget: 'boolean' }
+                  - { label: 'Text', name: 'text', widget: 'text' }
+                  - { label: 'Number', name: 'number', widget: 'number' }
+                  - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+                  - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+                  - { label: 'Image', name: 'image', widget: 'image' }
+                  - { label: 'File', name: 'file', widget: 'file' }
+                  - { label: 'Select', name: 'select', widget: 'select', options: ['a', 'b', 'c'] }
+                  - { label: 'Hidden', name: 'hidden', widget: 'hidden', default: 'hidden' }
+                  - label: 'Object'
+                    name: 'object'
+                    widget: 'object'
+                    fields:
+                      - { label: 'String', name: 'string', widget: 'string' }
+                      - { label: 'Boolean', name: 'boolean', widget: 'boolean' }
+                      - { label: 'Text', name: 'text', widget: 'text' }
+                      - { label: 'Number', name: 'number', widget: 'number' }
+                      - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+                      - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+                      - { label: 'Image', name: 'image', widget: 'image' }
+                      - { label: 'File', name: 'file', widget: 'file' }
+                      - {
+                          label: 'Select',
+                          name: 'select',
+                          widget: 'select',
+                          options: ['a', 'b', 'c'],
+                        }
+      - label: 'Typed List'
+        name: 'typed_list'
+        widget: 'list'
+        types:
+          - label: 'Type 1 Object'
+            name: 'type_1_object'
+            widget: 'object'
+            fields:
+              - { label: 'String', name: 'string', widget: 'string' }
+              - { label: 'Boolean', name: 'boolean', widget: 'boolean' }
+              - { label: 'Text', name: 'text', widget: 'text' }
+          - label: 'Type 2 Object'
+            name: 'type_2_object'
+            widget: 'object'
+            fields:
+              - { label: 'Number', name: 'number', widget: 'number' }
+              - { label: 'Select', name: 'select', widget: 'select', options: ['a', 'b', 'c'] }
+              - { label: 'Datetime', name: 'datetime', widget: 'datetime' }
+              - { label: 'Markdown', name: 'markdown', widget: 'markdown' }
+          - label: 'Type 3 Object'
+            name: 'type_3_object'
+            widget: 'object'
+            fields:
+              - { label: 'Image', name: 'image', widget: 'image' }
+              - { label: 'File', name: 'file', widget: 'file' }
+  - name: pages # a nested collection
+    label: Pages
+    label_singular: 'Page'
+    folder: _pages
+    create: true
+    preview_path: 'pages/{{slug}}'
+    preview_path_preserve_slashes: true
+    nested: { depth: 100, subfolders: false }
+    fields:
+      - label: Title
+        name: title
+        widget: string
+    meta: { path: { widget: string, label: 'Path' } }

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import PropTypes from 'prop-types';
 import styled from '@emotion/styled';
 import { Dropdown, DropdownButton, DropdownItem } from 'decap-cms-ui-default';
@@ -21,8 +21,7 @@ function EditorComponentsToolbarButton({ disabled, editorComponents, allowedEdit
       const defaultValues = plugin.fields
         .toMap()
         .mapKeys((_, field) => field.get('name'))
-        .filter(field => field.has('default'))
-        .map(field => field.get('default'));
+        .map(field => field.get('default', ''));
 
       editor.tf.insertNodes(
         {

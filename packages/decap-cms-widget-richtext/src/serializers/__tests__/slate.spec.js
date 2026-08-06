@@ -1,7 +1,9 @@
+/** @jsxRuntime classic */
 /** @jsx h */
 
 import flow from 'lodash/flow';
 
+// eslint-disable-next-line no-unused-vars
 import h from '../../../test-helpers/h';
 import { markdownToSlate, slateToMarkdown } from '../index';
 
@@ -206,11 +208,11 @@ describe('slate', () => {
       const slateAst = (
         <editor>
           <element type="p">
-            <text delete>h</text>
-            <text delete><text bold>e</text></text>
-            <text delete><text bold><text italic>l</text></text></text>
-            <text delete><text bold>l</text></text>
-            <text delete>o</text>
+            <text strikethrough>h</text>
+            <text strikethrough><text bold>e</text></text>
+            <text strikethrough><text bold><text italic>l</text></text></text>
+            <text strikethrough><text bold>l</text></text>
+            <text strikethrough>o</text>
           </element>
         </editor>
       );
@@ -222,11 +224,11 @@ describe('slate', () => {
       const slateAst = (
         <editor>
           <element type="p">
-            <text delete>h</text>
-            <text delete><text italic>e</text></text>
-            <text delete><text italic><text bold>l</text></text></text>
-            <text delete><text italic>l</text></text>
-            <text delete>o</text>
+            <text strikethrough>h</text>
+            <text strikethrough><text italic>e</text></text>
+            <text strikethrough><text italic><text bold>l</text></text></text>
+            <text strikethrough><text italic>l</text></text>
+            <text strikethrough>o</text>
           </element>
         </editor>
       );
@@ -240,7 +242,7 @@ describe('slate', () => {
           <element type="p">
             <text bold>h</text>
             <text bold><text italic>e</text></text>
-            <text bold><text italic><text delete>l</text></text></text>
+            <text bold><text italic><text strikethrough>l</text></text></text>
             <text bold><text italic>l</text></text>
             <text bold>o</text>
           </element>
@@ -255,9 +257,9 @@ describe('slate', () => {
         <editor>
           <element type="p">
             <text bold>h</text>
-            <text bold><text delete>e</text></text>
-            <text bold><text delete><text italic>l</text></text></text>
-            <text bold><text delete>l</text></text>
+            <text bold><text strikethrough>e</text></text>
+            <text bold><text strikethrough><text italic>l</text></text></text>
+            <text bold><text strikethrough>l</text></text>
             <text bold>o</text>
           </element>
         </editor>
@@ -272,7 +274,7 @@ describe('slate', () => {
           <element type="p">
             <text italic>h</text>
             <text italic><text bold>e</text></text>
-            <text italic><text bold><text delete>l</text></text></text>
+            <text italic><text bold><text strikethrough>l</text></text></text>
             <text italic><text bold>l</text></text>
             <text italic>o</text>
           </element>
@@ -287,9 +289,9 @@ describe('slate', () => {
         <editor>
           <element type="p">
             <text italic>h</text>
-            <text italic><text delete>e</text></text>
-            <text italic><text delete><text bold>l</text></text></text>
-            <text italic><text delete>l</text></text>
+            <text italic><text strikethrough>e</text></text>
+            <text italic><text strikethrough><text bold>l</text></text></text>
+            <text italic><text strikethrough>l</text></text>
             <text italic>o</text>
           </element>
         </editor>
