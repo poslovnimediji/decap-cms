@@ -42,7 +42,7 @@ function createContextResolver(providedConfig, getMediaLibraryContext) {
       authUser.token ||
       storedAuthUser.access_token ||
       null;
-    const activeSiteId = context.activeSiteId || backendConfig.site_id || null;
+    const activeSiteId = context.activeSiteId || backendConfig.turbo_site_id || null;
     const baseUrl = backendConfig.base_url;
 
     return {

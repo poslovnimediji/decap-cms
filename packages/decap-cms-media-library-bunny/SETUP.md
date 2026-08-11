@@ -38,7 +38,7 @@ backend:
 
   app_id: your-project-ref
   anon_key: your-supabase-anon-key
-  site_id: your-site-uuid
+  turbo_site_id: your-site-uuid
 ```
 
 ## 3) Configure media library
@@ -84,7 +84,7 @@ The library resolves both from Decap backend/auth context.
 
 ### `Active site id is missing`
 
-- Set `backend.site_id`.
+- Set `backend.turbo_site_id`.
 - Confirm user has site membership on backend.
 
 ### `Backend base URL is missing`

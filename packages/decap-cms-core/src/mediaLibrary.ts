@@ -70,7 +70,7 @@ async function getMediaLibraryContext(): Promise<MediaLibraryContext> {
     backendConfig,
     authUser,
     token,
-    activeSiteId: (backendConfig?.site_id as string | undefined) || undefined,
+    activeSiteId: (backendConfig?.turbo_site_id as string | undefined) || undefined,
   };
 }
 

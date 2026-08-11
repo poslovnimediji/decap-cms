@@ -36,7 +36,7 @@ backend:
 
   app_id: your-project-ref
   anon_key: your-supabase-anon-key
-  site_id: your-site-uuid
+  turbo_site_id: your-site-uuid
 
 media_library:
   name: bunny
@@ -77,7 +77,7 @@ Open your admin UI and test any `image` field.
 
 ### Missing site id error
 
-- Verify `backend.site_id` is set.
+- Verify `backend.turbo_site_id` is set.
 - Verify the authenticated user has access to that site.
 
 ### Edge proxy request fails
