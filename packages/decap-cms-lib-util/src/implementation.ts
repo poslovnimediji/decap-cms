@@ -74,6 +74,12 @@ export interface Note {
   issueUrl?: string;
 }
 
+export interface PresenceEditor {
+  id: string;
+  name: string;
+  joinedAt: string;
+}
+
 export interface IssueState {
   number: number;
   title: string;
@@ -176,6 +182,7 @@ export type Config = {
     turbo_config_url?: string;
     supabase_app_id?: string;
     supabase_anon_key?: string;
+    presence?: boolean;
   };
   auth: {
     use_oidc?: boolean;
@@ -241,6 +248,13 @@ export interface Implementation {
     author: string;
     createdAt: string;
   } | null>;
+
+  subscribeToEntryPresence?: (
+    collection: string,
+    slug: string,
+    onUpdate: (editors: PresenceEditor[]) => void,
+  ) => Promise<void>;
+  unsubscribeFromEntryPresence?: (collection: string, slug: string) => Promise<void>;
 
   unpublishedEntries: () => Promise<string[]>;
   unpublishedEntry: (args: {

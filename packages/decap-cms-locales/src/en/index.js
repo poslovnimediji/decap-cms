@@ -127,6 +127,9 @@ const en = {
       toggleScrollSync: 'Sync scrolling',
       toggleNotes: 'Toggle notes',
     },
+    entryPresence: {
+      editingNow: '%{names} is also editing this entry |||| %{names} are also editing this entry',
+    },
     editorNotesPane: {
       title: 'Notes',
       emptyState: 'No notes yet. Add your first note below to start collaborating.',

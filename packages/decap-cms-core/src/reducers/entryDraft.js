@@ -24,6 +24,8 @@ import {
   DRAFT_NOTE_UPDATE,
   DRAFT_NOTE_DELETE,
   NOTES_POLLING_UPDATE,
+  ENTRY_PRESENCE_UPDATE,
+  ENTRY_PRESENCE_CLEAR,
 } from '../actions/entries';
 import {
   UNPUBLISHED_ENTRY_PERSIST_REQUEST,
@@ -44,6 +46,7 @@ const initialState = Map({
   fieldsMetaData: Map(),
   fieldsErrors: Map(),
   notes: List(),
+  presence: List(),
   hasChanged: false,
   key: '',
 });
@@ -58,6 +61,7 @@ function entryDraftReducer(state = Map(), action) {
         state.set('fieldsMetaData', Map());
         state.set('fieldsErrors', Map());
         state.set('notes', List());
+        state.set('presence', List());
         state.set('hasChanged', false);
         state.set('key', crypto.randomUUID());
       });
@@ -69,6 +73,7 @@ function entryDraftReducer(state = Map(), action) {
         state.set('fieldsMetaData', Map());
         state.set('fieldsErrors', Map());
         state.set('notes', List());
+        state.set('presence', List());
         state.set('hasChanged', false);
         state.set('key', crypto.randomUUID());
       });
@@ -229,6 +234,12 @@ function entryDraftReducer(state = Map(), action) {
 
     case NOTES_POLLING_UPDATE:
       return state.set('notes', fromJS(action.payload.notes));
+
+    case ENTRY_PRESENCE_UPDATE:
+      return state.set('presence', fromJS(action.payload.editors));
+
+    case ENTRY_PRESENCE_CLEAR:
+      return state.set('presence', List());
 
     default:
       return state;

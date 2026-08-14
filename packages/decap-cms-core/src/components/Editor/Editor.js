@@ -28,6 +28,8 @@ import {
   persistNote,
   updateNotePersist,
   deleteNotePersist,
+  subscribeToEntryPresence,
+  unsubscribeFromEntryPresence,
 } from '../../actions/entries';
 import {
   updateUnpublishedEntryStatus,
@@ -71,6 +73,8 @@ export class Editor extends React.Component {
     loadEntry: PropTypes.func.isRequired,
     loadNotes: PropTypes.func,
     stopNotesPolling: PropTypes.func,
+    subscribeToEntryPresence: PropTypes.func,
+    unsubscribeFromEntryPresence: PropTypes.func,
     persistEntry: PropTypes.func.isRequired,
     deleteEntry: PropTypes.func.isRequired,
     showDelete: PropTypes.bool.isRequired,
@@ -212,6 +216,15 @@ export class Editor extends React.Component {
       this.props.loadNotes(this.props.collection, this.props.slug);
     }
 
+    if (
+      prevProps.entry !== this.props.entry &&
+      this.props.entry &&
+      !this.props.entry.get('isFetching') &&
+      !this.props.newEntry
+    ) {
+      this.props.subscribeToEntryPresence(this.props.collection, this.props.slug);
+    }
+
     if (this.props.hasChanged) {
       this.createBackup(this.props.entryDraft.get('entry'), this.props.collection);
     }
@@ -232,6 +245,10 @@ export class Editor extends React.Component {
       isNotesEnabled(this.props.collection, this.props.slug)
     ) {
       this.props.stopNotesPolling(this.props.collection, this.props.slug);
+    }
+
+    if (!this.props.newEntry) {
+      this.props.unsubscribeFromEntryPresence(this.props.collection, this.props.slug);
     }
 
     this.createBackup.flush();
@@ -449,6 +466,7 @@ export class Editor extends React.Component {
         fieldsMetaData={entryDraft.get('fieldsMetaData')}
         fieldsErrors={entryDraft.get('fieldsErrors')}
         notes={entryDraft.get('notes')}
+        presence={entryDraft.get('presence')}
         onChange={this.handleChangeDraftField}
         onNotesChange={this.handleNotesChange}
         onValidate={changeDraftFieldValidation}
@@ -567,6 +585,8 @@ const mapDispatchToProps = {
   persistNote,
   updateNotePersist,
   deleteNotePersist,
+  subscribeToEntryPresence,
+  unsubscribeFromEntryPresence,
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(withWorkflow(translate()(Editor)));

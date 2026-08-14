@@ -14,8 +14,10 @@ import { SupabaseClient } from './supabase';
 import SupabaseAuthenticationPage from './AuthenticationPage';
 import { resolveCommitAuthorFromSupabaseUser } from './commitAuthor';
 import { recordCmsEvent } from './telemetry';
+import { PresenceClient } from './presence';
 
 import type { GitHubUser } from 'decap-cms-backend-github/src/implementation';
+import type { PresenceEditor } from 'decap-cms-lib-util';
 
 interface SupabaseUser extends User {
   access_token?: string;
@@ -102,6 +104,8 @@ export default class DecapTurboBackend extends GitHubBackend {
   refreshedTokenPromise?: Promise<string>;
 
   supabase: SupabaseClient;
+  presenceEnabled: boolean;
+  presence: PresenceClient | null = null;
 
   constructor(config: Config, options: any = {}) {
     super(config, options);
@@ -125,10 +129,16 @@ export default class DecapTurboBackend extends GitHubBackend {
       config.backend.supabase_app_id ||
       '') as string;
     this.supabaseId = (config.backend.supabase_app_id || '') as string;
+    // `base_url` is normally populated by preloadConfig's control-plane fetch;
+    // when fully-manually configured (no turbo_site_id) it falls back to the
+    // project's default hostname, same as every other Supabase URL here did
+    // before this override existed.
+    this.baseUrl = this.baseUrl || `https://${this.supabaseId}.supabase.co`;
     this.siteId = (config.backend.turbo_site_id || '') as string;
     this.commitAuthorEmailFallback =
       ((config.backend as Record<string, unknown>).commit_author_email as string | undefined) ||
       ((config.backend as Record<string, unknown>).noreply_email as string | undefined);
+    this.presenceEnabled = Boolean((config.backend as Record<string, unknown>).presence);
 
     this.updateUserCredentials = options.updateUserCredentials || (() => undefined);
 
@@ -136,7 +146,7 @@ export default class DecapTurboBackend extends GitHubBackend {
     this.tokenKeyword = 'Bearer';
 
     this.supabase = new SupabaseClient(
-      `https://${this.supabaseId}.supabase.co/rest/v1/data`,
+      `${this.baseUrl}/rest/v1/data`,
       this.supabaseAnonKey,
       this.branch,
       this.originRepo,
@@ -334,10 +344,23 @@ export default class DecapTurboBackend extends GitHubBackend {
       throw new Error('Your GitHub user account does not have access to this repo.');
     }
 
-    this.api!.commitAuthor = resolveCommitAuthorFromSupabaseUser(
+    const commitAuthor = resolveCommitAuthorFromSupabaseUser(
       state as SupabaseUser,
       this.commitAuthorEmailFallback,
     );
+    this.api!.commitAuthor = commitAuthor;
+
+    if (this.presenceEnabled && this.siteId && commitAuthor) {
+      const userId =
+        (state as SupabaseUser).user_email || (state as SupabaseUser).email || commitAuthor.email;
+      this.presence = new PresenceClient(
+        this.baseUrl!,
+        this.supabaseAnonKey,
+        this.siteId,
+        userId,
+        commitAuthor.name,
+      );
+    }
 
     // Only knowable post-auth (the `config` bootstrap endpoint's static
     // preloadConfig hook runs before a user JWT exists), so it's fetched
@@ -489,7 +512,7 @@ export default class DecapTurboBackend extends GitHubBackend {
       return;
     }
 
-    const updateResponse = await fetch(`https://${this.supabaseId}.supabase.co/auth/v1/user`, {
+    const updateResponse = await fetch(`${this.baseUrl}/auth/v1/user`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -546,7 +569,7 @@ export default class DecapTurboBackend extends GitHubBackend {
     }
 
     const response = await fetch(
-      `https://${this.supabaseId}.supabase.co/auth/v1/token?grant_type=refresh_token`,
+      `${this.baseUrl}/auth/v1/token?grant_type=refresh_token`,
       {
         method: 'POST',
         headers: {
@@ -595,6 +618,7 @@ export default class DecapTurboBackend extends GitHubBackend {
           this.supabaseRefreshToken = data.refresh_token;
           this.supabaseExpiresAt = data.expires_at;
           this.supabase.setAccessToken(this.supabaseAccessToken);
+          this.presence?.setAccessToken(this.supabaseAccessToken);
           this.token = data.access_token;
           if (this.api) {
             this.api.token = data.access_token;
@@ -771,5 +795,23 @@ export default class DecapTurboBackend extends GitHubBackend {
 
   async entriesByFolder(folder: string, extension: string, depth: number) {
     return this.allEntriesByFolder(folder, extension, depth);
+  }
+
+  async subscribeToEntryPresence(
+    collection: string,
+    slug: string,
+    onUpdate: (editors: PresenceEditor[]) => void,
+  ) {
+    if (!this.presence) {
+      return;
+    }
+    await this.presence.subscribe(collection, slug, onUpdate);
+  }
+
+  async unsubscribeFromEntryPresence(collection: string, slug: string) {
+    if (!this.presence) {
+      return;
+    }
+    await this.presence.unsubscribe(collection, slug);
   }
 }

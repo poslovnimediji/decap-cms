@@ -77,6 +77,7 @@ import type {
   UnpublishedEntryMediaFile as UEMF,
   DataFile as DF,
   Note as NT,
+  PresenceEditor as PE,
   IssueState as IS,
   CommentData as CD,
   ChangeType as CT,
@@ -106,6 +107,7 @@ export type FetchError = FE;
 export type PointerFile = PF;
 export type DataFile = DF;
 export type Note = NT;
+export type PresenceEditor = PE;
 export type IssueState = IS;
 export type CommentData = CD;
 export type IssueChangeData = ICD;

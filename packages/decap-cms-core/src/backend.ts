@@ -82,6 +82,7 @@ import type {
   DataFile,
   UnpublishedEntryDiff,
   Note,
+  PresenceEditor,
   IssueChange,
 } from 'decap-cms-lib-util';
 import type { Map } from 'immutable';
@@ -308,6 +309,13 @@ type Implementation = BackendImplementation & {
   ) => Promise<void>;
   stopNotesPolling?: (collection: string, slug: string) => Promise<void>;
   refreshNotesNow?: (collection: string, slug: string) => Promise<void>;
+
+  subscribeToEntryPresence?: (
+    collection: string,
+    slug: string,
+    onUpdate: (editors: PresenceEditor[]) => void,
+  ) => Promise<void>;
+  unsubscribeFromEntryPresence?: (collection: string, slug: string) => Promise<void>;
 };
 
 function prepareMetaPath(path: string, collection: Collection) {
@@ -694,6 +702,27 @@ export class Backend {
     }
     // Fallback: just reload notes without polling
     console.warn(`Backend '${this.backendName}' does not support manual refresh`);
+  }
+
+  get supportsEntryPresence(): boolean {
+    return typeof this.implementation.subscribeToEntryPresence === 'function';
+  }
+
+  async subscribeToEntryPresence(
+    collection: string,
+    slug: string,
+    onUpdate: (editors: PresenceEditor[]) => void,
+  ): Promise<void> {
+    if (!this.implementation.subscribeToEntryPresence) {
+      return;
+    }
+    return this.implementation.subscribeToEntryPresence(collection, slug, onUpdate);
+  }
+
+  async unsubscribeFromEntryPresence(collection: string, slug: string): Promise<void> {
+    if (typeof this.implementation.unsubscribeFromEntryPresence === 'function') {
+      return this.implementation.unsubscribeFromEntryPresence(collection, slug);
+    }
   }
 
   reopenIssueForUnpublishedEntry(collection: string, slug: string) {

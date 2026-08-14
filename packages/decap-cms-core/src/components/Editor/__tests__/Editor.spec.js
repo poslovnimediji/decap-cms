@@ -51,6 +51,8 @@ describe('Editor', () => {
     retrieveLocalBackup: jest.fn(),
     persistLocalBackup: jest.fn(),
     location: { search: '?title=title' },
+    subscribeToEntryPresence: jest.fn(),
+    unsubscribeFromEntryPresence: jest.fn(),
   };
 
   beforeEach(() => {

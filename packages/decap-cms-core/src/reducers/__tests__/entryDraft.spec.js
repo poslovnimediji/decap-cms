@@ -12,6 +12,7 @@ const initialState = Map({
   hasChanged: false,
   key: '',
   notes: List([]),
+  presence: List([]),
 });
 
 const entry = {
@@ -39,6 +40,7 @@ describe('entryDraft reducer', () => {
           hasChanged: false,
           key: '1',
           notes: List([]),
+          presence: List([]),
         }),
       );
     });
@@ -58,6 +60,7 @@ describe('entryDraft reducer', () => {
           hasChanged: false,
           key: '1',
           notes: List([]),
+          presence: List([]),
         }),
       );
     });
@@ -136,6 +139,7 @@ describe('entryDraft reducer', () => {
         hasChanged: true,
         key: '',
         notes: [], // This stays as regular array in .toJS() output
+        presence: [],
       });
     });
   });
@@ -154,6 +158,7 @@ describe('entryDraft reducer', () => {
         hasChanged: true,
         key: '',
         notes: [], // This stays as regular array in .toJS() output
+        presence: [],
       });
     });
   });
@@ -176,6 +181,7 @@ describe('entryDraft reducer', () => {
         hasChanged: true,
         key: '1',
         notes: [], // This stays as regular array in .toJS() output
+        presence: [],
       });
     });
   });
@@ -199,6 +205,7 @@ describe('entryDraft reducer', () => {
         },
         key: '',
         notes: [], // This stays as regular array in .toJS() output
+        presence: [],
       });
     });
   });

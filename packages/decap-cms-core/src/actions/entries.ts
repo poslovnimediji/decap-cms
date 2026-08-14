@@ -29,7 +29,7 @@ import { hasI18n, duplicateDefaultI18nFields, serializeI18n, I18N, I18N_FIELD } 
 import { addNotification } from './notifications';
 import { FILES } from '../constants/collectionTypes';
 
-import type { ImplementationMediaFile, Note, IssueChange } from 'decap-cms-lib-util';
+import type { ImplementationMediaFile, Note, PresenceEditor, IssueChange } from 'decap-cms-lib-util';
 import type { AnyAction } from 'redux';
 import type { ThunkDispatch } from 'redux-thunk';
 import type {
@@ -119,6 +119,9 @@ export const NOTES_POLLING_START = 'NOTES_POLLING_START';
 export const NOTES_POLLING_STOP = 'NOTES_POLLING_STOP';
 export const NOTES_POLLING_UPDATE = 'NOTES_POLLING_UPDATE';
 export const NOTES_CHANGE_DETECTED = 'NOTES_CHANGE_DETECTED';
+
+export const ENTRY_PRESENCE_UPDATE = 'ENTRY_PRESENCE_UPDATE';
+export const ENTRY_PRESENCE_CLEAR = 'ENTRY_PRESENCE_CLEAR';
 
 /*
  * Simple Action Creators (Internal)
@@ -1302,6 +1305,74 @@ export function refreshNotesNow(collection: Collection, slug: string) {
       await backend.refreshNotesNow(collection.get('name'), slug);
     } catch (error) {
       console.error('[DecapNotes Polling] Failed to refresh notes:', error);
+    }
+  };
+}
+
+export function entryPresenceUpdated(
+  collection: Collection,
+  slug: string,
+  editors: PresenceEditor[],
+) {
+  return {
+    type: ENTRY_PRESENCE_UPDATE,
+    payload: {
+      collection: collection.get('name'),
+      slug,
+      editors,
+    },
+  };
+}
+
+export function entryPresenceCleared(collection: Collection, slug: string) {
+  return {
+    type: ENTRY_PRESENCE_CLEAR,
+    payload: {
+      collection: collection.get('name'),
+      slug,
+    },
+  };
+}
+
+/**
+ * Start sharing/observing presence for an entry, if the current backend supports it.
+ */
+export function subscribeToEntryPresence(collection: Collection, slug: string) {
+  return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
+    try {
+      const state = getState();
+      const backend = currentBackend(state.config);
+
+      if (!backend.supportsEntryPresence) {
+        return;
+      }
+
+      await backend.subscribeToEntryPresence(collection.get('name'), slug, editors => {
+        dispatch(entryPresenceUpdated(collection, slug, editors));
+      });
+    } catch (error) {
+      console.error('[EntryPresence] Failed to subscribe to entry presence:', error);
+    }
+  };
+}
+
+/**
+ * Stop sharing/observing presence for an entry.
+ */
+export function unsubscribeFromEntryPresence(collection: Collection, slug: string) {
+  return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
+    try {
+      const state = getState();
+      const backend = currentBackend(state.config);
+
+      if (!backend.supportsEntryPresence) {
+        return;
+      }
+
+      await backend.unsubscribeFromEntryPresence(collection.get('name'), slug);
+      dispatch(entryPresenceCleared(collection, slug));
+    } catch (error) {
+      console.error('[EntryPresence] Failed to unsubscribe from entry presence:', error);
     }
   };
 }

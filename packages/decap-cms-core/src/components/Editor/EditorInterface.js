@@ -18,6 +18,7 @@ import EditorControlPane from './EditorControlPane/EditorControlPane';
 import EditorPreviewPane from './EditorPreviewPane/EditorPreviewPane';
 import EditorNotesPane from './EditorNotesPane/EditorNotesPane';
 import EditorToolbar from './EditorToolbar';
+import EntryPresenceBanner from './EntryPresenceBanner';
 import { hasI18n, getI18nInfo, getPreviewEntry } from '../../lib/i18n';
 import { FILES } from '../../constants/collectionTypes';
 import { getFileFromSlug } from '../../reducers/collections';
@@ -442,6 +443,7 @@ class EditorInterface extends Component {
           deployPreview={deployPreview}
           editorBackLink={editorBackLink}
         />
+        <EntryPresenceBanner editors={this.props.presence} t={t} />
         <Editor key={draftKey}>
           <ViewControls>
             {collectionI18nEnabled && (
@@ -531,6 +533,7 @@ EditorInterface.propTypes = {
   t: PropTypes.func.isRequired,
   notes: ImmutablePropTypes.list,
   onNotesChange: PropTypes.func,
+  presence: ImmutablePropTypes.list,
 };
 
 export default EditorInterface;
