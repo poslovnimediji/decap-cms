@@ -286,6 +286,9 @@ export interface Implementation {
   ) => Promise<{ entries: ImplementationEntry[]; cursor: Cursor }>;
 
   isGitBackend?: () => boolean;
+
+  reloadEntriesAfterPersist?: boolean;
+
   status: () => Promise<{
     auth: { status: boolean };
     api: { status: boolean; statusPage: string };
