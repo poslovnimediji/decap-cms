@@ -11,7 +11,10 @@ type File = {
   id: string;
   name: string;
   path: string;
-  size: number;
+  // GitLab's repository/tree listing (unlike GitHub's) doesn't return a file
+  // size — this is only ever spread into cache metadata for display, never
+  // read directly by validateFiles itself, so it's safe to omit.
+  size?: number;
 };
 
 export class SupabaseClient {
