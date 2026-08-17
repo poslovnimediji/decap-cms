@@ -27,10 +27,23 @@ import {
 
 import type { AddressedMediaFile } from '../types';
 
+// Supabase Edge Functions reject request bodies above this size before our
+// code ever runs, so uploads must be rejected client-side with a clear
+// message rather than surfacing an opaque gateway/edge-function error.
+const DEFAULT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
+  }
+  return `${(bytes / 1024).toFixed(0)}KB`;
+}
+
 interface BunnyWidgetProps {
   config: {
     cdn_url_prefix: string;
     root_path?: string;
+    max_file_size?: number;
   };
   resolveRequestContext: () => Promise<{
     accessToken: string | null;
@@ -64,6 +77,7 @@ export function BunnyWidget({
   const [isManagerReady, setIsManagerReady] = useState(false);
 
   const fileManagerRef = useRef<BunnyFileManager | null>(null);
+  const maxFileSize = config.max_file_size ?? DEFAULT_MAX_FILE_SIZE_BYTES;
 
   useEffect(() => {
     let isMounted = true;
@@ -226,6 +240,15 @@ export function BunnyWidget({
   async function handleUpload(uploadedFiles: File[]) {
     if (!fileManagerRef.current) return;
 
+    const oversizedFile = uploadedFiles.find(file => file.size > maxFileSize);
+    if (oversizedFile) {
+      setError(
+        `"${oversizedFile.name}" is ${formatBytes(oversizedFile.size)}, which exceeds the ` +
+          `${formatBytes(maxFileSize)} upload limit. Please choose a smaller file.`,
+      );
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
     const urls: string[] = [];
@@ -316,6 +339,7 @@ export function BunnyWidget({
           isUploading={isUploading}
           uploadProgress={uploadProgress}
           currentPath={currentPath}
+          maxFileSizeLabel={formatBytes(maxFileSize)}
         />
 
         {/* File Grid */}

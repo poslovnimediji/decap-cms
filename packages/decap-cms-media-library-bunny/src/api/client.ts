@@ -79,12 +79,13 @@ export class BunnyClient {
 
   async uploadFile(filePath: string, file: Blob): Promise<void> {
     const url = this.buildUrl(filePath);
-    const arrayBuffer = await file.arrayBuffer();
 
+    // Pass the Blob directly so the browser streams it instead of
+    // materializing the whole file in memory via file.arrayBuffer().
     const response = await fetch(url, {
       method: 'PUT',
-      headers: await this.getHeaders(),
-      body: arrayBuffer,
+      headers: await this.getHeaders(file.type || 'application/octet-stream'),
+      body: file,
     });
 
     await this.handleResponse<void>(response);

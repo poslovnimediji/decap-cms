@@ -24,6 +24,7 @@ interface FileUploadProps {
   isUploading: boolean;
   uploadProgress: number;
   currentPath: string;
+  maxFileSizeLabel?: string;
 }
 
 export function FileUpload({
@@ -31,6 +32,7 @@ export function FileUpload({
   isUploading,
   uploadProgress,
   currentPath,
+  maxFileSizeLabel,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,7 +112,10 @@ export function FileUpload({
           <StyledDropContent>
             <StyledDropIcon>📤</StyledDropIcon>
             <StyledDropText>Drag files here or click to upload</StyledDropText>
-            <StyledDropSubtext>Uploading to: {currentPath}</StyledDropSubtext>
+            <StyledDropSubtext>
+              Uploading to: {currentPath}
+              {maxFileSizeLabel ? ` (max ${maxFileSizeLabel} per file)` : ''}
+            </StyledDropSubtext>
           </StyledDropContent>
         )}
       </StyledDropZone>
