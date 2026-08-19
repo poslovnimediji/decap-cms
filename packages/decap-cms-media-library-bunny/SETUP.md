@@ -5,7 +5,7 @@ This guide describes the current Bunny integration model: client requests go thr
 ## Prerequisites
 
 - Decap CMS with `decap-turbo` backend
-- Deployed `bunny` edge function (`/functions/v1/bunny`)
+- Deployed `integrations` edge function (`/functions/v1/integrations/bunny`)
 - Bunny CDN URL prefix for public media URLs
 
 ## 1) Install and register
@@ -60,7 +60,7 @@ Supported Bunny-specific config:
 
 Requests are sent to:
 
-`https://<PROJECT_REF>.supabase.co/functions/v1/bunny/<storage-path>`
+`https://<PROJECT_REF>.supabase.co/functions/v1/integrations/bunny/<storage-path>`
 
 With headers:
 

@@ -26,7 +26,7 @@ function getBackendConfigFromWindow() {
 
 function buildEdgeBaseUrl(baseUrl) {
   const normalized = baseUrl.replace(/\/+$/, '');
-  return `${normalized}/functions/v1/bunny`;
+  return `${normalized}/functions/v1/integrations/bunny`;
 }
 
 function createContextResolver(providedConfig, getMediaLibraryContext) {

@@ -31,7 +31,7 @@ packages/decap-cms-media-library-bunny/
 1. Decap initializes external media library via `init()`.
 2. Bunny integration resolves request context from Decap backend/auth state.
 3. Widget validates context (`token`, `siteId`, `edgeBaseUrl`).
-4. `BunnyClient` sends requests to `/functions/v1/bunny/<path>`.
+4. `BunnyClient` sends requests to `/functions/v1/integrations/bunny/<path>`.
 5. Edge function forwards to Bunny Storage API server-side.
 
 ## Request contract used by client

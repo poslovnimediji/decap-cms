@@ -54,7 +54,7 @@ Notes:
 
 The backend must expose:
 
-- `https://<PROJECT_REF>.supabase.co/functions/v1/bunny/...`
+- `https://<PROJECT_REF>.supabase.co/functions/v1/integrations/bunny/...`
 - `Authorization: Bearer <access_token>`
 - `x-site-id: <site_uuid>`
 
@@ -83,7 +83,7 @@ Open your admin UI and test any `image` field.
 ### Edge proxy request fails
 
 - Verify `backend.base_url` is correct.
-- Verify `functions/v1/bunny` is deployed and reachable.
+- Verify `functions/v1/integrations/bunny` is deployed and reachable.
 
 ## Next steps
 

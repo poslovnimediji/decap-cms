@@ -113,4 +113,4 @@ Include:
 - sanitized backend/media config
 - repro steps
 - expected vs actual
-- network response details for `/functions/v1/bunny/*`
+- network response details for `/functions/v1/integrations/bunny/*`

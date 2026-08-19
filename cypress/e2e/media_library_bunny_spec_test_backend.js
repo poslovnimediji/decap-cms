@@ -1,7 +1,7 @@
 import { login, newPost } from '../utils/steps';
 
 describe('Test Backend Bunny Media Library', () => {
-  const edgeBaseUrl = 'https://example.supabase.co/functions/v1/bunny';
+  const edgeBaseUrl = 'https://example.supabase.co/functions/v1/integrations/bunny';
   const siteId = 'test-site-id';
   const accessToken = 'test-access-token';
 
@@ -64,7 +64,7 @@ describe('Test Backend Bunny Media Library', () => {
       win.localStorage.setItem('decap-cms-user', JSON.stringify({ access_token: accessToken }));
     });
 
-    cy.intercept('GET', '**/functions/v1/bunny*', req => {
+    cy.intercept('GET', '**/functions/v1/integrations/bunny*', req => {
       req.reply({
         statusCode: 200,
         body: bunnyListResponse,
