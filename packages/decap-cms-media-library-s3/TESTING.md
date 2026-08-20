@@ -69,10 +69,9 @@ Expected:
 Expected:
 
 - Progress updates.
-- Files appear in listing.
-- Single upload in single-select mode auto-inserts.
-- Large uploads (well above typical thumbnail sizes) stream rather than buffering — verify no
-  browser memory spike and no failure right at `max_file_size`.
+- Files appear in listing, pre-selected — the modal stays open after upload so you can review the
+  result before clicking "Insert" (upload does not auto-insert or auto-close).
+- No failure right at `max_file_size`.
 
 ### 5. Delete
 

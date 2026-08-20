@@ -267,11 +267,9 @@ export function S3Widget({
       const filesData = await fileManagerRef.current.getFilesWithUrls(currentPath, imagesOnly);
       setFiles(filesData);
 
-      // Auto-insert if single file uploaded in single-select mode
-      if (uploadedFiles.length === 1 && !allowMultiple) {
-        onInsert(urls[0]);
-        onClose();
-      }
+      // Select the newly uploaded file(s) rather than auto-inserting, so the
+      // modal stays open and the user explicitly confirms with "Insert".
+      setSelectedFiles(new Set(urls));
     } catch (err) {
       setError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

@@ -104,3 +104,15 @@ package-level provider branching exists.
 - Buckets must already be publicly readable (directly, via a custom domain,
   or via a CDN) for `public_url_prefix` to resolve to usable asset URLs —
   this integration does not generate presigned GET URLs for viewing.
+- The edge function's `s3` adapter buffers the upload body in memory before
+  forwarding it, rather than streaming it through byte-for-byte. This is
+  necessary because S3/R2 require a real `Content-Length` on `PUT` requests,
+  and `fetch()` cannot supply one for a streamed body of unknown length — a
+  streamed forward is silently sent as chunked transfer-encoding instead,
+  which R2 rejects with `411 Length Required`. Buffering is bounded by the
+  client's `max_file_size` (default 50MB) and by what Supabase Edge
+  Functions already accept as a request body, so this isn't a meaningful
+  regression in practice.
+- Upload does not auto-insert or auto-close the modal — after a successful
+  upload the new file(s) are pre-selected in the grid, and the user confirms
+  with "Insert", the same as selecting an existing file.
