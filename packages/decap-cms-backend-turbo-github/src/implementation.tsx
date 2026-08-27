@@ -3,8 +3,8 @@ import {
   type Config,
   type User,
   type Credentials,
-  filterByExtension,
   APIError,
+  collectionKeyForFiles,
 } from 'decap-cms-lib-util';
 import API from 'decap-cms-backend-github/src/API';
 import GraphQLAPI from 'decap-cms-backend-github/src/GraphQLAPI';
@@ -709,27 +709,62 @@ export default class DecapTurboGitHubBackend extends GitHubBackend {
     return this._currentUserPromise!;
   }
 
+  /**
+   * Reads one entry, verifying the cached row is current before trusting it.
+   *
+   * The check is not cosmetic. Collection loads revalidate the branch head on
+   * every sync, but this path is reached directly — core's loadEntry when an
+   * editor deep-links to an entry, and once per non-default locale for
+   * multiple_files/multiple_folders i18n — and used to return whatever was in
+   * the cache with no freshness check at all.
+   *
+   * A stale read here is a lost update, not just stale display: persistFiles
+   * rebases onto the branch's current head and rewrites the edited path, so
+   * saving stale content is a fast-forward commit that silently reverts
+   * whoever committed in between.
+   *
+   * Server-side this costs one conditional request against the shared
+   * per-branch ETag, which GitHub does not charge against the rate limit when
+   * it 304s. A negative answer falls through to GitHubBackend.getEntry, which
+   * reads the file straight from GitHub.
+   */
   async getEntry(path: string) {
     const cached = await this.supabase.fetchEntryByPath(path);
-    if (cached) {
-      return cached;
+    if (!cached) {
+      return super.getEntry(path);
     }
+
+    try {
+      const response = await this.ghFetch(`${this.apiRoot}/_content/entry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, branch: this.branch }),
+      });
+      const { fresh } = await response.json();
+      if (fresh) {
+        return cached;
+      }
+    } catch (error) {
+      // Falling through to GitHub on an unreachable check is the safe
+      // direction: it costs requests, where trusting the cache costs edits.
+      console.warn('Turbo entry freshness check failed, reading from GitHub', error);
+    }
+
     return super.getEntry(path);
   }
 
   async persistEntry(entry: any, options: any = {}) {
     const result = await super.persistEntry(entry, options);
     if (result && entry.dataFiles && entry.dataFiles.length > 0) {
-      try {
-        const filesToCache = entry.dataFiles.map((file: any) => ({
-          path: file.path || file.newPath || file.slug,
-          raw: file.raw,
-          id: file.id,
-        }));
-        await this.supabase.updateEntriesAfterSave(filesToCache);
-      } catch (error) {
-        console.warn('Failed to update cache:', error);
-      }
+      // The cache is no longer written from here. The commit moves the branch
+      // HEAD, and `reloadEntriesAfterPersist` makes core re-run loadEntries
+      // immediately after a save, so the very next allEntriesByFolder syncs
+      // against the new HEAD and materialises the saved entry server-side.
+      //
+      // The old write-back was close to useless anyway: core's dataFiles carry
+      // no `id`, so every row it wrote kept its pre-save blob sha and was
+      // deleted and re-fetched by the next listing (see
+      // decap-turbo/docs/caching-and-github-api-strategy.md §1.6).
       recordCmsEvent(
         this.baseUrl!,
         this.supabaseAnonKey,
@@ -742,6 +777,76 @@ export default class DecapTurboGitHubBackend extends GitHubBackend {
     return result;
   }
 
+  /**
+   * Asks Turbo to make the cache correct for this collection as of the
+   * branch's current HEAD. The server owns tree reading, blob fetching and
+   * materialisation; this call is the only thing standing between the client
+   * and a plain PostgREST read.
+   */
+  async syncCollection(
+    collection: string,
+    folder: string,
+    extension: string,
+    depth: number,
+    pathRegex?: RegExp,
+  ) {
+    return this.postCollectionSync({
+      name: collection,
+      folder,
+      extension,
+      depth,
+      // Sent as source + flags rather than a stringified literal so the server
+      // can rebuild the exact RegExp without parsing `/.../flags`.
+      ...(pathRegex && { pathRegexSource: pathRegex.source, pathRegexFlags: pathRegex.flags }),
+    });
+  }
+
+  async postCollectionSync(collection: Record<string, unknown>) {
+    const response = await this.ghFetch(`${this.apiRoot}/_content/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ collection, branch: this.branch }),
+    });
+    return response.json();
+  }
+
+  /**
+   * Files collections (`type: files` in config.yml) were the last read path
+   * still going straight to GitHub: GitHubBackend.entriesByFiles fetches a blob
+   * AND a commits lookup per file on every single load, with no cache at all.
+   * Across the live beta that is 77 configured file paths, so ~154 GitHub
+   * requests per full CMS load, forever.
+   *
+   * They share the whole sync pipeline with folder collections — tree read,
+   * sha-addressed blob store, batched metadata, atomic reconcile,
+   * single-flight — differing only in how paths are selected, so the server
+   * takes an explicit path list instead of a folder selector.
+   */
+  async entriesByFiles(files: { path: string; label?: string }[]) {
+    const paths = files.map(file => file.path);
+    if (paths.length === 0) {
+      return [];
+    }
+
+    const collection = collectionKeyForFiles(paths);
+    await this.postCollectionSync({ name: collection, files: paths });
+
+    const entries = await this.supabase.fetchEntries(collection);
+    const byPath = new Map(entries.map(entry => [String(entry.file?.path), entry]));
+
+    // Every configured file must produce an entry, including ones that do not
+    // exist in the repo yet. A files collection is a fixed list of documents
+    // the editor declared, and an entry that has never been saved is how you
+    // create it — dropping it removes the only way to add the file at all.
+    // GitHubBackend.entriesByFiles gets this for free by catching the read
+    // error and yielding empty content; syncing from a tree has to reinstate
+    // it explicitly, because a path with no blob simply is not in the tree.
+    //
+    // Order follows the config, not the path: for a files collection that
+    // ordering is the author's choice, not an accident of the filesystem.
+    return files.map(file => byPath.get(file.path) ?? { file: { ...file, id: null }, data: '' });
+  }
+
   async allEntriesByFolder(
     folder: string,
     extension: string,
@@ -749,35 +854,20 @@ export default class DecapTurboGitHubBackend extends GitHubBackend {
     pathRegex?: RegExp,
     searchTerm?: string,
   ) {
-    const repoURL = this.api!.originRepoURL;
     const collection = `${folder}:${extension}:${depth}:${pathRegex?.toString() || 'all'}`;
 
-    const files = (
-      await this.api!.listFiles(folder, {
-        repoURL,
-        depth,
-      })
-    ).filter(
-      file => (!pathRegex || pathRegex.test(file.path)) && filterByExtension(file, extension),
-    );
-
-    const readFile = (path: string, id: string | null | undefined) =>
-      this.api!.readFile(path, id, { repoURL }) as Promise<string>;
-
-    await this.supabase.validateFiles(
-      collection,
-      files,
-      readFile,
-      this.api!.readFileMetadata.bind(this.api),
-    );
+    // One request replaces what used to be a tree listing plus two GitHub
+    // calls per entry driven from the browser — 2,001 requests for a
+    // 1,000-entry collection, against a 5,000/hour installation budget.
+    await this.syncCollection(collection, folder, extension, depth, pathRegex);
 
     const entries = await this.supabase.fetchEntries(collection, searchTerm);
-    const fileIdToIndex = new Map(files.map((file, index) => [file.id, index]));
-    entries.sort((a, b) => {
-      const indexA = fileIdToIndex.get(a.file.id) ?? Number.MAX_SAFE_INTEGER;
-      const indexB = fileIdToIndex.get(b.file.id) ?? Number.MAX_SAFE_INTEGER;
-      return indexA - indexB;
-    });
+
+    // Ordering used to come from the GitHub tree the client had just fetched.
+    // It no longer has one, and path order is what the tree gave anyway
+    // (GitHub returns tree entries sorted by path), so sort by path here to
+    // keep entry order stable across loads.
+    entries.sort((a, b) => String(a.file?.path ?? '').localeCompare(String(b.file?.path ?? '')));
 
     return entries;
   }
