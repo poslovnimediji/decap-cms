@@ -46,12 +46,7 @@ async function moveFile(from: string, to: string) {
   await fs.rename(from, to);
 }
 
-export async function move(
-  from: string,
-  to: string,
-  hasSubfolders = true,
-  isFolder?: boolean,
-) {
+export async function move(from: string, to: string, hasSubfolders = true, isFolder?: boolean) {
   // move file
   await moveFile(from, to);
 

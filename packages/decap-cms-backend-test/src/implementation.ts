@@ -36,6 +36,7 @@ type Diff = {
   newFile: boolean;
   status: string;
   content: string | AssetProxy;
+  isFolder?: boolean;
 };
 
 type UnpublishedRepoEntry = {
@@ -83,11 +84,18 @@ function deleteFile(path: string, tree: RepoTree) {
   unset(tree, path.split('/'));
 }
 
-function moveFile(path: string, newPath: string, tree: RepoTree, hasSubfolders: boolean) {
+function moveFile(
+  path: string,
+  newPath: string,
+  tree: RepoTree,
+  hasSubfolders: boolean,
+  isFolder?: boolean,
+) {
   const sourceDir = dirname(path);
   const destDir = dirname(newPath);
 
-  if (!hasSubfolders || sourceDir === destDir) {
+  // Only move the single file for subfolder-less collections and slug-type entries
+  if (!hasSubfolders || isFolder === false || sourceDir === destDir) {
     deleteFile(path, tree);
     return;
   }
@@ -298,7 +306,7 @@ export default class TestBackend implements Implementation {
   ) {
     const diffs: Diff[] = [];
     dataFiles.forEach(dataFile => {
-      const { path, newPath, raw } = dataFile;
+      const { path, newPath, raw, isFolder } = dataFile;
       const currentDataFile = window.repoFilesUnpublished[key]?.diffs.find(d => d.path === path);
       const originalPath = currentDataFile ? currentDataFile.originalPath : path;
       diffs.push({
@@ -308,6 +316,7 @@ export default class TestBackend implements Implementation {
         newFile: isEmpty(getFile(originalPath as string, window.repoFiles)),
         status: 'added',
         content: raw,
+        isFolder,
       });
     });
     assetProxies.forEach(a => {
@@ -351,9 +360,9 @@ export default class TestBackend implements Implementation {
     }
 
     entry.dataFiles.forEach(dataFile => {
-      const { path, newPath, raw } = dataFile;
+      const { path, newPath, raw, isFolder } = dataFile;
       if (newPath) {
-        moveFile(path, newPath, window.repoFiles, options.hasSubfolders !== false);
+        moveFile(path, newPath, window.repoFiles, options.hasSubfolders !== false, isFolder);
       }
       writeFile(newPath || path, raw, window.repoFiles);
     });
@@ -378,7 +387,7 @@ export default class TestBackend implements Implementation {
     unpubEntry.diffs.forEach(d => {
       if (d.originalPath && !d.newFile) {
         const originalPath = d.originalPath;
-        moveFile(originalPath, d.path, tree, unpubEntry.hasSubfolders);
+        moveFile(originalPath, d.path, tree, unpubEntry.hasSubfolders, d.isFolder);
       }
       writeFile(d.path, d.content, tree);
     });

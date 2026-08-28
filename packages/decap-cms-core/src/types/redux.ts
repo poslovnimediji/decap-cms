@@ -358,7 +358,7 @@ export interface CmsCollectionMeta {
   path?: {
     label: string;
     widget: string;
-    index_file: string;
+    index_file?: string;
   };
 }
 
@@ -391,6 +391,8 @@ export interface CmsCollection {
   publish?: boolean;
   nested?: {
     depth: number;
+    subfolders?: boolean;
+    summary?: string;
   };
   type: typeof FOLDER | typeof FILES;
   meta?: CmsCollectionMeta;
@@ -720,6 +722,7 @@ type i18n = StaticallyTypedRecord<{
 type IndexFile = StaticallyTypedRecord<{
   pattern: string;
   fields?: EntryFields;
+  editor?: StaticallyTypedRecord<{ preview?: boolean }>;
 }>;
 
 export type Format = keyof typeof formatExtensions | string;

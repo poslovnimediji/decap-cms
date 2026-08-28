@@ -83,10 +83,15 @@ function CollectionTop({ collection, newEntryUrl, t }) {
     <CollectionTopContainer>
       <CollectionTopRow>
         <CollectionTopHeading>{collectionLabel}</CollectionTopHeading>
-        {indexFileConfig && collection.get('nested') ? (
+        {indexFileConfig && collection.get('nested') && newEntryUrl ? (
           <Dropdown
             renderButton={() => (
-              <CollectionTopDropdownButton>
+              <CollectionTopDropdownButton
+                dir="auto"
+                aria-label={t('collection.collectionTop.newButtonAriaLabel', {
+                  collectionLabel: collectionLabelSingular || collectionLabel,
+                })}
+              >
                 {t('collection.collectionTop.newButton', {
                   collectionLabel: collectionLabelSingular || collectionLabel,
                 })}
@@ -115,7 +120,6 @@ function CollectionTop({ collection, newEntryUrl, t }) {
               collectionLabel: collectionLabelSingular || collectionLabel,
             })}
           >
-
             {t('collection.collectionTop.newButton', {
               collectionLabel: collectionLabelSingular || collectionLabel,
             })}

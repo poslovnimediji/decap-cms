@@ -257,14 +257,32 @@ export function selectCustomPath(collection, entryDraft) {
   }
 
   const indexFile = get(collection.toJS(), ['meta', 'path', 'index_file']);
-  const pathType = meta && meta.get('path_type', indexFile ? 'index' : 'slug');
+  const pathType = meta && meta.get('path_type');
   const extension = selectFolderEntryExtension(collection);
 
-  if (indexFile && (pathType === 'index' || isNestedSubfolders(collection))) {
-    return join(collection.get('folder'), path, `${indexFile}.${extension}`);
+  if (indexFile) {
+    const currentPath = entryDraft.getIn(['entry', 'path']);
+    const currentFilename = currentPath && basename(currentPath, `.${extension}`);
+    // With subfolders every entry owns a directory, so `path` is that directory and the
+    // file is named after the index file. Without subfolders only index entries work that
+    // way — a slug entry's `path` already ends in its own filename (see prepareMetaPath),
+    // so appending a filename to it would push the entry one directory deeper on save.
+    const useIndexFile =
+      isNestedSubfolders(collection) ||
+      pathType === 'index' ||
+      (!pathType &&
+        (entryDraft.getIn(['entry', 'newRecord']) === true || currentFilename === indexFile));
+
+    if (useIndexFile) {
+      return join(collection.get('folder'), path, `${indexFile}.${extension}`);
+    }
+
+    const pathSegments = path.split('/');
+    const fileName = pathSegments.pop();
+    const filePath = pathSegments.join('/');
+    return join(collection.get('folder'), filePath, `${fileName}.${extension}`);
   }
 
-  // New behavior: generate filename from entry title
   const isNewEntry = entryDraft.getIn(['entry', 'newRecord']);
   const currentPath = entryDraft.getIn(['entry', 'path']);
 
