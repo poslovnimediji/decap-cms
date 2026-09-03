@@ -128,6 +128,46 @@ export function getFilePaths(
   return paths;
 }
 
+/**
+ * The locale files an entry was actually loaded from.
+ *
+ * `getFilePaths` returns a path for every configured locale, whether or not a file exists.
+ * That is fine for writing, but asking a backend to delete a path that is not in the tree
+ * fails the whole commit (GitHub answers `GitRPC::BadObjectState`). Probing the backend is
+ * not an option either: the GitHub, Gitea and Forgejo implementations of `getEntry` resolve
+ * with empty data instead of rejecting when a file is missing.
+ *
+ * The merged entry already knows which locales it found: `i18n` holds every locale except
+ * the one the entry's own path points at. Fall back to every configured locale when the
+ * entry is not in the store, which keeps the previous behaviour for unknown entries.
+ */
+export function getExistingFilePaths(
+  collection: Collection,
+  extension: string,
+  path: string,
+  slug: string,
+  entry?: EntryMap,
+) {
+  const { structure, defaultLocale } = getI18nInfo(collection) as I18nInfo;
+
+  if (structure === I18N_STRUCTURE.SINGLE_FILE) {
+    return [path];
+  }
+
+  // Nothing loaded for this entry, so we cannot know: keep the old behaviour.
+  if (!entry) {
+    return getFilePaths(collection, extension, path, slug);
+  }
+
+  // `mergeValues` only sets `i18n` when the entry has locales beyond the one its own path
+  // points at, so an absent key means the entry exists in the default locale only.
+  const i18n = entry.get('i18n');
+  const locales = [defaultLocale, ...(i18n ? i18n.keySeq().toArray() : [])];
+  return locales.map(locale =>
+    getFilePath(structure as I18N_STRUCTURE, extension, path, slug, locale),
+  );
+}
+
 export function normalizeFilePath(structure: I18N_STRUCTURE, path: string, locale: string) {
   switch (structure) {
     case I18N_STRUCTURE.MULTIPLE_FOLDERS:
@@ -142,7 +182,7 @@ export function normalizeFilePath(structure: I18N_STRUCTURE, path: string, local
 
 // Remove meta fields that should not be serialized to frontmatter
 function removeMetaFields(data: unknown) {
-  if (!data || typeof data !== 'object' || !('delete' in data)) {
+  if (!Map.isMap(data)) {
     return data;
   }
   return (data as Map<string, unknown>).delete('path').delete('path_type');
@@ -329,7 +369,13 @@ export async function getI18nEntry(
 
     const nonNullValues = entryValuesResults
       .map(e => (e.status === 'fulfilled' ? e.value : undefined))
-      .filter((e): e is { value: EntryValue; locale: string } => e !== undefined);
+      .filter((e): e is { value: EntryValue; locale: string } => e !== undefined)
+      // The GitHub, Gitea and Forgejo backends end `getEntry` with a `.catch` that resolves
+      // with empty data instead of rejecting, so a locale that has no file reaches us looking
+      // like an empty translation. Left in, the entry claims translations it does not have,
+      // and deleting it then asks the backend to remove paths that are not in the tree, which
+      // GitHub rejects with `GitRPC::BadObjectState`.
+      .filter(e => e.value.raw !== '');
 
     if (nonNullValues.length === 0) {
       // mergeValues will throw on an empty list, and show the error messages.
@@ -364,6 +410,10 @@ export function groupEntries(collection: Collection, extension: string, entries:
 
   const groupedEntries = Object.values(grouped).reduce((acc, values) => {
     const entryValue = mergeValues(collection, structure, defaultLocale, values);
+    // `mergeValues` reports the slug of the default-locale file. When the locale files sit in
+    // different folders (or the default locale is missing) that differs from the slug the entry
+    // was actually read under, which is the one callers need to write or delete the right files.
+    // Keep it as `srcSlug` so the caller can restore it; see `getEntry` in backend.ts.
     if (values[0]?.value?.slug !== entryValue.slug) {
       entryValue.srcSlug = values[0]?.value?.slug;
     }

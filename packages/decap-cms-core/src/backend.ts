@@ -53,7 +53,7 @@ import {
   getI18nFiles,
   hasI18n,
   getFilePath,
-  getFilePaths,
+  getExistingFilePaths,
   getI18nEntry,
   groupEntries,
   getI18nDataFiles,
@@ -323,10 +323,14 @@ function prepareMetaPath(path: string, collection: Collection, slug?: string) {
     return path;
   }
 
+  // Only collections that opt into index files can hold slug-type entries, whose meta path
+  // is the entry path itself. Without `index_file` every entry keeps the legacy behaviour of
+  // reporting the folder it lives in.
   if (
     slug &&
     isNested(collection) &&
     !isNestedSubfolders(collection) &&
+    collection.get('index_file') &&
     prepareMetaPathType(slug, collection) !== 'index'
   ) {
     return slug;
@@ -1242,6 +1246,8 @@ export class Backend {
       );
       entries = entries.filter(Boolean);
       const grouped = await groupEntries(collection, extension, entries as EntryValue[]);
+      // Grouping reports the default-locale slug; restore the slug the entry was requested
+      // under so later writes and deletes target the files we actually read. See `groupEntries`.
       if (grouped[0]?.srcSlug) {
         grouped[0].slug = grouped[0].srcSlug;
       }
@@ -1621,20 +1627,10 @@ export class Backend {
     await this.invokePreUnpublishEvent(entry);
     let paths = [path];
     if (hasI18n(collection)) {
-      const allPaths = getFilePaths(collection, extension, path, slug);
-      // Filter out non-existent files to prevent deletion errors
-      const existingPaths = await Promise.all(
-        allPaths.map(async filePath => {
-          try {
-            await this.implementation.getEntry(filePath);
-            return filePath;
-          } catch (error) {
-            // File doesn't exist, skip it
-            return null;
-          }
-        }),
-      );
-      paths = existingPaths.filter((p): p is string => p !== null);
+      // Only delete the locale files the entry was actually loaded from. Asking GitHub to
+      // delete a path that is not in the tree fails the whole commit with
+      // `GitRPC::BadObjectState`, which is what a partially translated entry used to hit.
+      paths = getExistingFilePaths(collection, extension, path, slug, entry);
     }
     await this.implementation.deleteFiles(paths, commitMessage);
 

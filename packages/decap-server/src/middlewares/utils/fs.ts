@@ -79,8 +79,8 @@ export async function move(
     return;
   }
 
-  // Legacy behavior (subfolders: true, default): move all files in the directory
-  // This is for collections where all files in a folder represent a single entry
+  // Legacy behavior (subfolders: true, default): move all files in the directory.
+  // This is for collections where all files in a folder represent a single entry.
   const sourceDir = path.dirname(resolvedFrom);
   const destDir = path.dirname(resolvedTo);
   const allFiles = await listFiles(sourceDir, '', 100);

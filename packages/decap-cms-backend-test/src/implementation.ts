@@ -105,7 +105,10 @@ function moveFile(
   );
   files.forEach(file => {
     deleteFile(file.path, tree);
-    writeFile(file.path.replace(sourceDir, destDir), file.content, tree);
+    // the moved entry itself is rewritten by the caller at its new path
+    if (file.path !== path) {
+      writeFile(file.path.replace(sourceDir, destDir), file.content, tree);
+    }
   });
 }
 
@@ -361,7 +364,8 @@ export default class TestBackend implements Implementation {
 
     entry.dataFiles.forEach(dataFile => {
       const { path, newPath, raw, isFolder } = dataFile;
-      if (newPath) {
+      if (newPath && newPath !== path) {
+        // only folder-type (index) entries drag their subfolder contents along
         moveFile(path, newPath, window.repoFiles, options.hasSubfolders !== false, isFolder);
       }
       writeFile(newPath || path, raw, window.repoFiles);
