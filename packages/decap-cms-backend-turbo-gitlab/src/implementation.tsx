@@ -12,7 +12,14 @@ import { stripIndent } from 'common-tags';
 import { SupabaseClient } from './supabase';
 import SupabaseAuthenticationPage from './AuthenticationPage';
 import { resolveCommitAuthorFromSupabaseUser } from './commitAuthor';
+import { coalesceKey, createRequestCoalescer, type RequestCoalescer } from './requestCoalescer';
 import { recordCmsEvent } from './telemetry';
+import {
+  createProxyMeter,
+  measurePayloadBytes,
+  recordProxyResponse,
+  type ProxyMeter,
+} from './saveMetrics';
 
 interface SupabaseUser extends User {
   access_token?: string;
@@ -26,6 +33,10 @@ interface SupabaseUser extends User {
     display_name?: string;
     full_name?: string;
     name?: string;
+    // Set by Supabase for OAuth sign-ins (Google spells it `picture`); absent
+    // for email/password users, who fall back to the generic avatar icon.
+    avatar_url?: string;
+    picture?: string;
   };
 }
 
@@ -52,6 +63,22 @@ type GitLabUser = {
 
 const REFRESH_BUFFER_SECONDS = 300;
 const REFRESH_RETRY_ATTEMPTS = 3;
+/** How long to stop retrying after a refresh failed transiently. */
+const REFRESH_COOLDOWN_MS = 30_000;
+/**
+ * GoTrue refresh-grant failures that mean the token is dead for good. Kept
+ * alongside the status check so a code arriving under an unexpected status is
+ * still recognised.
+ */
+const TERMINAL_REFRESH_CODES = new Set([
+  'refresh_token_not_found',
+  'refresh_token_already_used',
+  'invalid_grant',
+  'invalid_refresh_token',
+  'session_not_found',
+  'session_expired',
+]);
+
 
 // See decap-cms-backend-turbo-github's implementation.tsx for the GitHub-flavored
 // twin of this — same rationale: shared control-plane values are identical
@@ -89,20 +116,44 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
     }
 
     const defaults = await response.json();
+    // The config endpoint returns them as JSON strings; typing them here keeps
+    // the spread below assignable to the backend config's `repo`/`branch`.
+    const { repo, branch, ...otherDefaults } = defaults as Record<string, unknown> & {
+      repo?: string;
+      branch?: string;
+    };
 
     return {
       ...config,
-      backend: { ...defaults, ...config.backend },
+      backend: {
+        ...otherDefaults,
+        ...config.backend,
+        // repo/branch are authoritative from the sites row, not config.yml —
+        // see decap-cms-backend-turbo-github's implementation.tsx for why.
+        ...(repo ? { repo } : {}),
+        ...(branch ? { branch } : {}),
+      },
     };
   }
 
   supabaseAccessToken: string | null = null;
   supabaseRefreshToken: string | null = null;
   supabaseExpiresAt: number | null = null;
+  /**
+   * The signed-in person, as opposed to the project being edited: email,
+   * display name and (for OAuth sign-ins) avatar, straight off the Turbo
+   * session. `currentUser` reports these to the header. Survives a reload
+   * because `authenticate` returns the same fields on the stored user object,
+   * which `restoreUser` hands straight back. Cleared by `logout`.
+   */
+  supabaseIdentity: SupabaseUser | null = null;
   supabaseAnonKey: string;
   supabaseId: string;
   siteId: string;
   commitAuthorEmailFallback?: string;
+  // API.commitAuthor is typed as an untyped `{}`, so this mirrors its email
+  // in a typed field for callers (e.g. telemetry) that need to read it back.
+  commitAuthorEmail?: string;
   updateUserCredentialsFn: (credentials: Credentials) => void;
   // refreshedTokenPromise is already declared (and typed identically) on the
   // GitLabBackend base class — redeclaring it here would need TypeScript's
@@ -110,7 +161,23 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
   // (no allowDeclareFields), so it's intentionally omitted rather than
   // re-declared.
   reloadEntriesAfterPersist?: boolean;
+  /** Epoch ms before which refreshSessionIfNeeded will not try again. */
+  refreshBlockedUntil = 0;
   _currentUserPromise?: Promise<GitLabUser>;
+  /**
+   * Non-null only while a save is in flight. Every proxied response is folded
+   * into it, so `cms_entry_saved` can report how many round trips that one save
+   * cost and how much of the wait was GitLab's own time. Null the rest of the
+   * time, so ordinary reads are not counted.
+   */
+  proxyMeter: ProxyMeter | null = null;
+
+  /**
+   * Joins concurrent identical reads. One per backend instance, so every read
+   * path — the proxied GitLab API via `apiRequestFunction` and this backend's
+   * own `glFetch` — shares a single view of what is already in flight.
+   */
+  protected coalesceRequest: RequestCoalescer = createRequestCoalescer();
 
   supabase: SupabaseClient;
 
@@ -173,7 +240,22 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       scopedReq = unsentRequest.withParams({ site_id: this.siteId }, scopedReq);
     }
 
-    const response: Response = await unsentRequest.performRequest(scopedReq);
+    // Coalescing and metering both hang off this one funnel — it is the only
+    // place that sees the final, fully scoped request. `recordProxyResponse`
+    // sits inside the coalesced work so the save meter counts round trips
+    // actually made, rather than letting a joined duplicate inflate the count.
+    const response: Response = await this.coalesceRequest(
+      coalesceKey(scopedReq.get('method'), unsentRequest.toURL(scopedReq)),
+      () =>
+        unsentRequest.performRequest(scopedReq).then((res: Response) => {
+          // Recorded here because this is the one place every API response
+          // passes through — including failures, since a request that failed
+          // still cost the editor the wait.
+          recordProxyResponse(this.proxyMeter, res);
+          return res;
+        }),
+    );
+
     return response;
   };
 
@@ -208,7 +290,12 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       scopedUrl = urlObj.toString();
     }
 
-    const response = await fetch(scopedUrl, { ...init, headers });
+    const response = await this.coalesceRequest(coalesceKey(init.method, scopedUrl), () =>
+      fetch(scopedUrl, { ...init, headers }).then(res => {
+        recordProxyResponse(this.proxyMeter, res);
+        return res;
+      }),
+    );
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
@@ -248,6 +335,33 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       auth: { status: auth },
       api: { status: true, statusPage: '' },
     };
+  }
+
+  /**
+   * The Turbo session lives on this instance, not only in the auth store core
+   * clears — GitLabBackend.logout only nulls `token` and knows nothing about
+   * Supabase. Without this, a logged-out CMS kept a usable access token
+   * (`status()` would keep reporting `auth: true`), a Supabase client still
+   * sending it, and a memoised `currentUser`.
+   *
+   * This deliberately does NOT end the Turbo session itself: that cookie
+   * belongs to the dashboard's origin, and one site's CMS logout must not sign
+   * the user out of the dashboard and every other site's CMS. Signing out of
+   * Turbo is the dashboard's own logout button.
+   *
+   * Mirrors decap-cms-backend-turbo-github's override, minus the deploy
+   * watcher this backend has no equivalent of.
+   */
+  async logout() {
+    this.supabaseAccessToken = null;
+    this.supabaseRefreshToken = null;
+    this.supabaseExpiresAt = null;
+    this.supabaseIdentity = null;
+    this.supabase.setAccessToken(null);
+    this._currentUserPromise = undefined;
+    this.refreshedTokenPromise = undefined;
+    this.refreshBlockedUntil = 0;
+    return super.logout();
   }
 
   // Widened to `any`: decap-cms-core only ever forwards whatever this
@@ -294,6 +408,7 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
     }
 
     const supabaseState = state as SupabaseUser;
+    this.supabaseIdentity = supabaseState;
     const activeSiteFromState = supabaseState.user_metadata?.active_site_id;
     if (this.siteId && this.supabaseAccessToken && activeSiteFromState !== this.siteId) {
       await this.setActiveSiteAndRefresh();
@@ -314,7 +429,23 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       requestFunction: this.apiRequestFunction,
     });
 
-    const user = await this.api.user();
+    // Permissions are only knowable post-auth (the `config` bootstrap
+    // endpoint's static preloadConfig hook runs before a user JWT exists), so
+    // they are fetched here rather than resolved earlier — but nothing below
+    // the write-access check needs them, so the two round trips overlap
+    // instead of queueing. `currentUser` is local (session identity, no
+    // fetch), so it joins them for free.
+    //
+    // Unlike the GitHub twin, `hasWriteAccess` is NOT redundant here: this
+    // backend commits with the organization's GitLab group token, and whether
+    // that token can write to this project is a real question with a real
+    // answer, enforced below. On GitHub the equivalent check was asking about
+    // a signed-in GitHub user that Turbo does not have.
+    const [user, turboPermissions] = await Promise.all([
+      this.api.user(),
+      this.fetchTurboPermissions(),
+    ]);
+
     const isCollab = await this.api.hasWriteAccess().catch((error: Error) => {
       error.message = stripIndent`
         Repo "${this.repo}" not found.
@@ -337,24 +468,34 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       }
     }
 
-    this.api.commitAuthor = resolveCommitAuthorFromSupabaseUser(
+    const commitAuthor = resolveCommitAuthorFromSupabaseUser(
       state as SupabaseUser,
       this.commitAuthorEmailFallback,
     );
+    this.api.commitAuthor = commitAuthor;
+    this.commitAuthorEmail = commitAuthor?.email;
 
-    // Only knowable post-auth (the `config` bootstrap endpoint's static
-    // preloadConfig hook runs before a user JWT exists), so it's fetched
-    // here and attached to the returned user rather than resolved earlier.
-    // decap-cms-core's actions/auth.ts picks up `permissions` off this object
-    // generically (the field name is backend-neutral by design — any backend
-    // could set it) and re-filters the loaded config against it.
-    const turboPermissions = await this.fetchTurboPermissions();
+    // `turboPermissions` was resolved above, alongside the user. It is attached
+    // to the returned user object because decap-cms-core's actions/auth.ts
+    // picks `permissions` up off it generically (the field name is
+    // backend-neutral by design — any backend could set it) and re-filters the
+    // loaded config against it.
 
     recordCmsEvent(this.baseUrl!, this.supabaseAnonKey, this.supabaseAccessToken, 'cms_session_started', this.siteId);
+
+    const displayIdentity = this.sessionIdentity();
 
     return {
       ...user,
       login: user.username,
+      // The `gl` proxy synthesizes /user itself (the CMS user has no real
+      // GitLab identity), and falls back to the literal name "CMS Editor"
+      // when Supabase knows no full name — so prefer what the session says
+      // about the person. This object is what core stores and the header
+      // renders.
+      ...(displayIdentity.name && { name: displayIdentity.name }),
+      ...(displayIdentity.email && { email: displayIdentity.email }),
+      avatar_url: displayIdentity.avatarUrl ?? user.avatar_url ?? null,
       token: state.token as string,
       ...('access_token' in state && { access_token: state.access_token }),
       ...('refresh_token' in state && { refresh_token: state.refresh_token }),
@@ -371,6 +512,15 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
     if (!this.supabaseAccessToken || !this.siteId) {
       return undefined;
     }
+
+    // Refresh first, like every other call site that sends this token
+    // (`ghFetch`/`glFetch`, `setActiveSiteAndRefresh`, `getToken`). While this
+    // ran after `api.user()` it inherited the refresh `currentUser` performs;
+    // running the two concurrently made it read a token that was still
+    // expiring, and a 401 here does not fail loudly — it silently drops the
+    // editor's collection restrictions. Refreshes are memoised on
+    // `refreshedTokenPromise`, so sharing one with `currentUser` costs nothing.
+    await this.refreshSessionIfNeeded();
 
     try {
       const res = await fetch(
@@ -398,25 +548,55 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       return;
     }
 
-    const updateResponse = await fetch(`https://${this.supabaseId}.supabase.co/auth/v1/user`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: this.supabaseAnonKey,
-        Authorization: `Bearer ${this.supabaseAccessToken}`,
-      },
-      body: JSON.stringify({
-        data: {
-          active_site_id: this.siteId,
-        },
-      }),
-    });
+    // Proactive: a restored session's access token is commonly past `exp` by
+    // the time this runs (it's checked before any other request), so refresh
+    // it first using the same buffer/backoff/terminal-detection every other
+    // call site in this class already applies, instead of handing a stale
+    // token straight to Supabase.
+    await this.refreshSessionIfNeeded();
 
-    if (!updateResponse.ok) {
-      throw new Error('Failed to set active_site_id in Supabase user metadata');
+    const putActiveSiteId = () =>
+      fetch(`https://${this.supabaseId}.supabase.co/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: this.supabaseAnonKey,
+          Authorization: `Bearer ${this.supabaseAccessToken}`,
+        },
+        body: JSON.stringify({
+          data: {
+            active_site_id: this.siteId,
+          },
+        }),
+      });
+
+    let updateResponse = await putActiveSiteId();
+
+    if (!updateResponse.ok && (updateResponse.status === 401 || updateResponse.status === 403)) {
+      // Reactive fallback: covers a stored session with no `expires_at` (so
+      // the proactive check above was a no-op) or a token invalidated after
+      // that check ran. One refresh-then-retry, same as everywhere else.
+      const refreshed = await this.getRefreshedAccessToken().then(
+        () => true,
+        () => false,
+      );
+      if (refreshed) {
+        updateResponse = await putActiveSiteId();
+      }
     }
 
-    await this.getRefreshedAccessToken();
+    if (!updateResponse.ok) {
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    // The metadata is already set server-side at this point; refreshing now
+    // only opportunistically rolls the new active_site_id into a fresh JWT's
+    // claims. A failure here (e.g. a refresh token already rotated by another
+    // tab) shouldn't undo an otherwise-successful login on a still-valid
+    // access token.
+    await this.getRefreshedAccessToken().catch(error => {
+      console.warn('Failed to refresh Supabase token after setting active_site_id', error);
+    });
   }
 
   isOffline() {
@@ -427,10 +607,18 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
     if (status === 401) {
       return true;
     }
-    if (status === 400 && ['invalid_grant', 'invalid_refresh_token'].includes(String(code))) {
+    // ANY 400 from the refresh grant is terminal — see the GitHub twin for the
+    // full reasoning. GoTrue answers a refresh it cannot honour with 400 and
+    // one of several codes (`refresh_token_not_found`,
+    // `refresh_token_already_used`, `invalid_grant`, `invalid_refresh_token`,
+    // `session_not_found`, `session_expired`), all of which mean the token is
+    // dead. Allow-listing two of them made a dead session look transient and
+    // turned one collection load into a refresh storm the session could never
+    // recover from.
+    if (status === 400) {
       return true;
     }
-    return false;
+    return TERMINAL_REFRESH_CODES.has(String(code));
   }
 
   isRetryableStatus(status?: number) {
@@ -513,6 +701,7 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
             this.api.token = data.access_token;
           }
           this._currentUserPromise = undefined;
+          this.refreshBlockedUntil = 0;
 
           this.updateUserCredentialsFn({
             token: data.access_token,
@@ -577,6 +766,14 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       return;
     }
 
+    // A refresh that just failed for a reason we decided NOT to log out over
+    // (offline, 5xx, a rate limit) is not worth re-attempting once per
+    // request: `refreshedTokenPromise` only dedupes refreshes that overlap in
+    // flight, and a collection load fires its entries sequentially.
+    if (Date.now() < this.refreshBlockedUntil) {
+      return;
+    }
+
     try {
       await this.getRefreshedAccessToken();
     } catch (error) {
@@ -585,6 +782,7 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
         this.logout();
         throw new Error(this.getRefreshFailureMessage(error));
       }
+      this.refreshBlockedUntil = Date.now() + REFRESH_COOLDOWN_MS;
     }
   }
 
@@ -593,18 +791,46 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
     return this.supabaseAccessToken || this.token || null;
   }
 
+  /**
+   * Who is signed in, as the CMS header should show them: display name, email
+   * and (for OAuth sign-ins) avatar, taken from the Turbo session rather than
+   * from the project. Until this existed the header could only name the group,
+   * which made a silent re-login — the Turbo dashboard session outlives a CMS
+   * logout by design, so "Login with Turbo" completes without a prompt —
+   * indistinguishable from a login as somebody else.
+   *
+   * Deliberately does not consult `commitAuthorEmailFallback`: a site-level
+   * noreply address is a reasonable commit author, but it is not a person who
+   * logged in.
+   */
+  sessionIdentity() {
+    const author = resolveCommitAuthorFromSupabaseUser(this.supabaseIdentity ?? {});
+    const metadata = this.supabaseIdentity?.user_metadata;
+    return {
+      name: author?.name,
+      email: author?.email,
+      avatarUrl: metadata?.avatar_url || metadata?.picture || null,
+    };
+  }
+
   async currentUser({ token }: { token: string } = { token: this.token || '' }): Promise<GitLabUser> {
     if (!this._currentUserPromise) {
       this._currentUserPromise = (async () => {
         await this.refreshSessionIfNeeded();
 
         const owner = this.repo.split('/')[0];
+        const identity = this.sessionIdentity();
 
+        // `username` stays the project owner: other GitLab code paths treat it
+        // as an identifier, not as a display name. `name`, `email` and the
+        // avatar are the human-facing fields, and they now name the person
+        // rather than the group.
         return {
           id: 0,
-          name: owner,
+          name: identity.name || owner,
           username: owner,
-          avatar_url: null,
+          email: identity.email,
+          avatar_url: identity.avatarUrl,
           token,
           access_token: this.supabaseAccessToken || undefined,
           refresh_token: this.supabaseRefreshToken || undefined,
@@ -653,7 +879,22 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
   }
 
   async persistEntry(entry: any, options: any = {}) {
-    const result = await super.persistEntry(entry, options);
+    // Timed around super.persistEntry rather than around the network calls
+    // themselves, so the number includes lock acquisition — which is time the
+    // editor waits with the save spinner up, whatever it is spent on.
+    const meter = createProxyMeter();
+    this.proxyMeter = meter;
+    const startedAt = Date.now();
+
+    let result;
+    try {
+      result = await super.persistEntry(entry, options);
+    } finally {
+      this.proxyMeter = null;
+    }
+
+    const durationMs = Date.now() - startedAt;
+
     if (result && entry.dataFiles && entry.dataFiles.length > 0) {
       // Deliberately does not write the cache — the server owns it. The commit
       // moves the branch head and reloadEntriesAfterPersist makes core re-list
@@ -666,10 +907,62 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
         this.supabaseAccessToken,
         'cms_entry_saved',
         this.siteId,
-        { collection: options.collectionName },
+        {
+          collection: options.collectionName,
+          slug: entry.dataFiles[0].slug,
+          path: entry.dataFiles[0].path,
+          branch: this.branch,
+          // Redundant with the server-derived user_id (from the auth JWT) —
+          // a fallback for the activity feed when that lookup misses.
+          authorEmail: this.commitAuthorEmail,
+          // Baseline for the one-call commit endpoint (decap-turbo
+          // docs/deploy-status-plan.md B5 -> B1). GitLab already commits in a
+          // single API call, so `requests` here is expected to be far lower
+          // than GitHub's — which is itself the comparison worth having.
+          durationMs,
+          requests: meter.requests,
+          // Omitted rather than sent as 0 when no response carried a readable
+          // Server-Timing, so "not measured" never averages in as "instant".
+          ...(meter.upstreamMeasured && { upstreamMs: Math.round(meter.upstreamMs) }),
+          files: entry.dataFiles.length + (entry.assets?.length ?? 0),
+          bytes: measurePayloadBytes(entry.dataFiles, entry.assets),
+        },
       );
     }
     return result;
+  }
+
+  /**
+   * Caches the i18n locale files the collection listing leaves out.
+   *
+   * `collectionRegex` narrows a listing to the default locale — one card per
+   * entry is what a list wants — so with `structure: multiple_files` only
+   * `slug.en.md` was ever ingested, and the editor, which reads every locale
+   * as its own file, missed the cache on each sibling and fell through to
+   * GitLab on every entry open.
+   *
+   * Its own collection key, not the listing's, so `fetchEntries` still returns
+   * one row per entry — the sibling rows are found by `fetchEntryByPath`,
+   * which matches on path alone and does not care which collection tagged
+   * them. Not awaited: nothing on this load needs it, and the entry it serves
+   * is a human click away, by which time the sync has long finished.
+   */
+  private warmLocaleSiblings(
+    folder: string,
+    extension: string,
+    depth: number,
+    localeSiblingRegex?: RegExp,
+  ) {
+    if (!localeSiblingRegex) {
+      return;
+    }
+
+    const collection = `${folder}:${extension}:${depth}:${localeSiblingRegex.toString()}`;
+    // Swallowed rather than surfaced: this is a prefetch, and the entry open
+    // it optimises reads from GitLab perfectly well without it.
+    this.syncCollection(collection, folder, extension, depth, localeSiblingRegex).catch(
+      () => undefined,
+    );
   }
 
   async allEntriesByFolder(
@@ -678,8 +971,11 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
     depth: number,
     pathRegex?: RegExp,
     searchTerm?: string,
+    localeSiblingRegex?: RegExp,
   ) {
     const collection = `${folder}:${extension}:${depth}:${pathRegex?.toString() || 'all'}`;
+
+    this.warmLocaleSiblings(folder, extension, depth, localeSiblingRegex);
 
     // One request, in place of a tree listing plus a file read and a commits
     // lookup per entry, driven from the browser.
@@ -720,7 +1016,22 @@ export default class DecapTurboGitLabBackend extends GitLabBackend {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ collection, branch: this.branch }),
     });
-    return response.json();
+    const result = await response.json();
+
+    // The server declines to fan out when the organization's GitLab budget is
+    // near its floor, so an editor's own requests keep working. The read below
+    // still happens and serves whatever is cached — the same outcome as losing
+    // the single-flight race — but a silently short collection is worth saying
+    // out loud, because otherwise the only symptom is missing entries.
+    if (result?.deferred) {
+      console.warn(
+        `Turbo deferred the sync for "${collection.name}": the GitLab API budget is low ` +
+          `(${result.rate_limited?.remaining} left). Showing cached content; it will catch up ` +
+          'once the budget recovers.',
+      );
+    }
+
+    return result;
   }
 
   /**

@@ -67,6 +67,31 @@ const AppHeaderTestRepoIndicator = styled.a`
   }
 `;
 
+// A plain list item, not a DropdownItem: it says who you are signed in as, it
+// is not something you can pick, and react-aria-menubutton would otherwise put
+// it in the keyboard rotation and close the menu when it was chosen.
+const AccountLabel = styled.li`
+  padding: 8px 14px;
+  border-bottom: 1px solid ${colors.textFieldBorder};
+  margin-bottom: 4px;
+  cursor: default;
+`;
+
+const AccountLabelLine = styled.div`
+  font-size: 13px;
+  font-weight: 500;
+  color: ${colors.text};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const AccountLabelEmail = styled(AccountLabelLine)`
+  font-size: 12px;
+  font-weight: 400;
+  color: ${colors.textLead};
+`;
+
 function Avatar({ imageUrl }) {
   return imageUrl ? (
     <AvatarImage src={imageUrl} />
@@ -85,10 +110,7 @@ const SettingsWrapper = styled.div`
   min-width: 0;
 `;
 
-export function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutClick, t, user }) {
-  const accountLabel = user?.email || '';
-
-
+function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, identity, onLogoutClick, t }) {
   return (
     <SettingsWrapper>
       {isTestRepo && (
@@ -107,6 +129,7 @@ export function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutCli
       ) : null}
       <Dropdown
         dropdownTopOverlap="50px"
+        dropdownWidth={identity ? '220px' : '100px'}
         dropdownPosition="right"
         renderButton={() => (
           <AvatarDropdownButton aria-label={t('ui.settingsDropdown.account')}>
@@ -114,7 +137,14 @@ export function SettingsDropdown({ displayUrl, isTestRepo, imageUrl, onLogoutCli
           </AvatarDropdownButton>
         )}
       >
-        {accountLabel ? <DropdownItem disabled label={accountLabel} /> : null}
+        {identity ? (
+          <AccountLabel>
+            <AccountLabelLine title={identity.label}>{identity.label}</AccountLabelLine>
+            {identity.email ? (
+              <AccountLabelEmail title={identity.email}>{identity.email}</AccountLabelEmail>
+            ) : null}
+          </AccountLabel>
+        ) : null}
         <DropdownItem label={t('ui.settingsDropdown.logOut')} onClick={onLogoutClick} />
       </Dropdown>
     </SettingsWrapper>
@@ -125,14 +155,12 @@ SettingsDropdown.propTypes = {
   displayUrl: PropTypes.string,
   isTestRepo: PropTypes.bool,
   imageUrl: PropTypes.string,
+  identity: PropTypes.shape({
+    label: PropTypes.string.isRequired,
+    email: PropTypes.string,
+  }),
   onLogoutClick: PropTypes.func.isRequired,
   t: PropTypes.func.isRequired,
-  user: PropTypes.shape({
-    backendName: PropTypes.string,
-    email: PropTypes.string,
-    login: PropTypes.string,
-    name: PropTypes.string,
-  }),
 };
 
 export default translate()(SettingsDropdown);
