@@ -3,7 +3,7 @@
  * Provides file browser interface integrated with Decap CMS
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import { S3FileManager } from '../api/fileManager';
 import S3FileGrid from './FileGrid';

@@ -1567,8 +1567,8 @@ export default class API {
     const commitAuthor = author
       ? author
       : this.commitAuthor
-        ? { name: this.commitAuthor.name, email: this.commitAuthor.email }
-        : undefined;
+      ? { name: this.commitAuthor.name, email: this.commitAuthor.email }
+      : undefined;
 
     const result: Endpoints['POST /repos/{owner}/{repo}/git/commits']['response']['data'] =
       await this.request(`${this.repoURL}/git/commits`, {

@@ -1,20 +1,20 @@
 import { API as GithubAPI } from 'decap-cms-backend-github';
 import { APIError } from 'decap-cms-lib-util';
 
-import type { Config as GitHubConfig, Diff } from 'decap-cms-backend-github/src/API';
+import type { Config as GitHubConfig, CommitAuthor, Diff } from 'decap-cms-backend-github/src/API';
 import type { FetchError } from 'decap-cms-lib-util';
 import type { Endpoints } from '@octokit/types';
 
 type Config = Omit<GitHubConfig, 'getUser'> & {
   apiRoot: string;
   tokenPromise: () => Promise<string>;
-  commitAuthor: { name: string };
+  commitAuthor: CommitAuthor;
   isLargeMedia: (filename: string) => Promise<boolean>;
 };
 
 export default class API extends GithubAPI {
   tokenPromise: () => Promise<string>;
-  commitAuthor: { name: string };
+  commitAuthor: CommitAuthor;
   isLargeMedia: (filename: string) => Promise<boolean>;
 
   constructor(config: Config) {
@@ -99,7 +99,7 @@ export default class API extends GithubAPI {
       message: string;
       tree: string;
       parents: string[];
-      author?: { name: string; date: string };
+      author?: CommitAuthor & { date: string };
     } = {
       message,
       tree: changeTree.sha,

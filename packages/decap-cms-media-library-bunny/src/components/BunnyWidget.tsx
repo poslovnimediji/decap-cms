@@ -3,7 +3,7 @@
  * Provides file browser interface integrated with Decap CMS
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import { BunnyFileManager } from '../api/fileManager';
 import BunnyFileGrid from './FileGrid';

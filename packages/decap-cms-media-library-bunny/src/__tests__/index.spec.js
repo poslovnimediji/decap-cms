@@ -40,7 +40,9 @@ describe('bunny media library', () => {
 
   describe('configuration', () => {
     it('throws when cdn_url_prefix is missing', async () => {
-      await expect(bunny.init()).rejects.toThrow('cdn_url_prefix is required in media_library config');
+      await expect(bunny.init()).rejects.toThrow(
+        'cdn_url_prefix is required in media_library config',
+      );
     });
   });
 

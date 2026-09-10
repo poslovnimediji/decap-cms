@@ -3,7 +3,7 @@
  * Handles file uploads with drag-and-drop support
  */
 
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   StyledDropContent,
@@ -18,6 +18,8 @@ import {
   StyledUploadingContent,
   StyledUploadingText,
 } from './styles';
+
+import type React from 'react';
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void;
