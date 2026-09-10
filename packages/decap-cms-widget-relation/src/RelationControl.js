@@ -475,15 +475,7 @@ export default class RelationControl extends Component {
         const hits = result.payload.hits || [];
         const options = this.parseHitOptions(hits);
         const optionsLength = field.get('options_length') || 20;
-        // With a search term, real matches must occupy the front of the
-        // list before truncation — otherwise a large initialOptions (every
-        // currently-selected option) can fill the slice on its own and bury
-        // every match. uniqOptions keeps the first occurrence of each value,
-        // so putting `options` first also means a match's fresh data wins
-        // over a stale initialOptions entry for the same value.
-        const uniq = term
-          ? uniqOptions(options, this.state.initialOptions).slice(0, optionsLength)
-          : uniqOptions(this.state.initialOptions, options).slice(0, optionsLength);
+        const uniq = uniqOptions(options, this.state.initialOptions).slice(0, optionsLength);
         callback(uniq);
       })
       .catch(error => {
@@ -528,6 +520,7 @@ export default class RelationControl extends Component {
         cacheOptions
         defaultOptions
         loadOptions={this.loadOptions}
+        loadingMessage={() => 'Loading options…'}
         onChange={this.handleChange}
         className={classNameWrapper}
         onFocus={setActiveStyle}

@@ -256,7 +256,11 @@ describe('editorialWorkflow actions', () => {
       const { currentBackend } = require('../../backend');
       const backend = { unpublishedEntries: jest.fn() };
       const store = mockStore({
-        config: fromJS({ publish_mode: 'editorial_workflow' }),
+        // Plain object, not fromJS: config left Immutable, and the guard reads
+        // `state.config.publish_mode` directly — an Immutable Map here makes it
+        // undefined, so the publish-mode check returns early and this test
+        // passes without ever exercising the isFetching guard it names.
+        config: { publish_mode: 'editorial_workflow' },
         collections: fromJS({}),
         editorialWorkflow: fromJS({ pages: { isFetching: true } }),
       });

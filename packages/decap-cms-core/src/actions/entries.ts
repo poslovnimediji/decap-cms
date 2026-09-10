@@ -44,6 +44,7 @@ import type {
   ViewGroup,
   Entry,
   Entries,
+  MediaFile,
 } from '../types/redux';
 import type { EntryValue } from '../valueObjects/Entry';
 import type { Backend } from '../backend';
@@ -429,7 +430,7 @@ export function draftDuplicateEntry(entry: EntryMap) {
       // an entry read outside of `createEntry` may carry neither key
       meta: (entry.get('meta') || Map()).toJS(),
       i18n: (entry.get('i18n') || Map()).toJS(),
-      mediaFiles: entry.get('mediaFiles').toJS(),
+      mediaFiles: entry.get('mediaFiles').toJS() as unknown as MediaFile[],
     }),
   };
 }
@@ -556,7 +557,7 @@ export function retrieveLocalBackup(collection: Collection, slug: string) {
           } else {
             return getAsset({
               collection,
-              entry: fromJS(entry),
+              entry: fromJS(entry) as unknown as EntryMap,
               path: file.path,
               field: file.field,
             })(dispatch, getState);
@@ -613,16 +614,16 @@ export async function tryLoadEntry(state: State, collection: Collection, slug: s
   return loadedEntry;
 }
 
+type AppendAction = { action: string; append: boolean };
+
 const appendActions = fromJS({
   ['append_next']: { action: 'next', append: true },
-});
+}) as Map<string, Map<string, string | boolean>>;
 
 function addAppendActionsToCursor(cursor: Cursor) {
   return Cursor.create(cursor).updateStore('actions', (actions: Set<string>) => {
     return actions.union(
-      appendActions
-        .filter((v: Map<string, string | boolean>) => actions.has(v.get('action') as string))
-        .keySeq(),
+      appendActions.filter(v => actions.has(v.get('action') as string)).keySeq(),
     );
   });
 }
@@ -729,7 +730,7 @@ export function traverseCollectionCursor(collection: Collection, action: string)
     const backend = currentBackend(state.config);
 
     const { action: realAction, append } = appendActions.has(action)
-      ? appendActions.get(action).toJS()
+      ? (appendActions.get(action)!.toJS() as AppendAction)
       : { action, append: false };
     const cursor = selectCollectionEntriesCursor(state.cursors, collection.get('name'));
 

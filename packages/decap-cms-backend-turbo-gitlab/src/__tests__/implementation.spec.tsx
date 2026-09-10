@@ -1,3 +1,5 @@
+import { unsentRequest } from 'decap-cms-lib-util';
+
 import DecapTurboGitLabBackend from '../implementation';
 import { recordCmsEvent } from '../telemetry';
 import { recordProxyResponse } from '../saveMetrics';
@@ -104,12 +106,13 @@ describe('turbo gitlab backend supabase session refresh', () => {
     });
     backend.supabaseAccessToken = 'access-123';
 
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) } as any);
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) } as any);
 
     // apiRequestFunction expects an Immutable-style ApiRequest — build a real
     // one via unsentRequest.fromURL rather than a hand-rolled fake, so this
     // test exercises the actual header/param shape sent.
-    const { unsentRequest } = require('decap-cms-lib-util');
     const req = unsentRequest.fromURL(
       'https://supabase.example/functions/v1/gl/projects/group%2Fproject/repository/tree',
     );
@@ -506,6 +509,47 @@ describe('turbo gitlab backend persistEntry save metrics', () => {
     const props = (recordCmsEvent as jest.Mock).mock.calls[0][5];
     expect(props.requests).toBe(1);
     expect('upstreamMs' in props).toBe(false);
+  });
+
+  // decap-turbo H12: authorEmail was a second copy of an email the row
+  // already identifies through the server-derived user_id, stored alongside
+  // the content path and slug in a table retained 180 days.
+  it('sends no email address in the props', async () => {
+    jest.spyOn(superPersistEntry, 'persistEntry').mockResolvedValue('post' as any);
+
+    const backend = makeBackend();
+    (backend as any).commitAuthorEmailFallback = 'editor@example.test';
+    await backend.persistEntry(entry, { collectionName: 'posts' } as any);
+
+    const props = (recordCmsEvent as jest.Mock).mock.calls[0][5];
+    expect(props).not.toHaveProperty('authorEmail');
+    expect(JSON.stringify(props)).not.toContain('@');
+  });
+
+  // decap-turbo L8: both used to report the site's branch, so a draft was
+  // logged and displayed as a publish.
+  it('reports the site branch for a normal save', async () => {
+    jest.spyOn(superPersistEntry, 'persistEntry').mockResolvedValue('post' as any);
+
+    const backend = makeBackend();
+    (backend as any).branch = 'turbo';
+    await backend.persistEntry(entry, { collectionName: 'posts' } as any);
+
+    const props = (recordCmsEvent as jest.Mock).mock.calls[0][5];
+    expect(props.branch).toBe('turbo');
+    expect(props.workflow).toBe(false);
+  });
+
+  it('reports the workflow branch for an editorial-workflow save', async () => {
+    jest.spyOn(superPersistEntry, 'persistEntry').mockResolvedValue('post' as any);
+
+    const backend = makeBackend();
+    (backend as any).branch = 'turbo';
+    await backend.persistEntry(entry, { collectionName: 'posts', useWorkflow: true } as any);
+
+    const props = (recordCmsEvent as jest.Mock).mock.calls[0][5];
+    expect(props.branch).toBe('cms/posts/post');
+    expect(props.workflow).toBe(true);
   });
 
   // A meter left active would silently attribute every subsequent read to the

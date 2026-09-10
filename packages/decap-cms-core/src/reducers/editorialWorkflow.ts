@@ -54,12 +54,29 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
     case UNPUBLISHED_ENTRIES_REQUEST:
       return state.setIn(['pages', 'isFetching'], true);
 
-    case UNPUBLISHED_ENTRIES_SUCCESS:
+    case UNPUBLISHED_ENTRIES_SUCCESS: {
+      const fetchedKeys = List(
+        action.payload!.entries.map(entry => generateContentKey(entry.collection, entry.slug)),
+      );
+      // Union, not replace. A key this session added by persisting an entry
+      // into review is not contradicted by a listing that does not mention it:
+      // the listing may have been requested before that commit landed, or
+      // served stale. Dropping it here while also stamping `loadedAt` turns
+      // "absent" into "confirmed absent", and loadUnpublishedEntry's shortcut
+      // then treats a live draft as published and loads it from the site
+      // branch, where it does not exist — "Failed to load entry: 404 File Not
+      // Found", and an editor showing "Published" for an entry still in
+      // review. Publishing and deleting prune keys explicitly, so a key that
+      // really is gone still goes; one that lingers costs a single per-slug
+      // lookup, which is the direction that fails safely.
+      const previousKeys = (state.getIn(['pages', 'keys']) as List<string>) || List<string>();
+      const keys = fetchedKeys.concat(previousKeys.filter(key => !fetchedKeys.includes(key)));
+
       return state.withMutations(map => {
         action.payload!.entries.forEach(entry =>
           map.setIn(
             ['entities', `${entry.collection}.${entry.slug}`],
-            fromJS(entry).set('isFetching', false),
+            fromJS({ ...entry, isFetching: false }),
           ),
         );
         map.set(
@@ -71,17 +88,14 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
             // so two collections may hold the same slug. Read by
             // loadUnpublishedEntry, which treats "this key is absent" as proof
             // the entry is not under editorial workflow.
-            keys: List(
-              action.payload!.entries.map(entry =>
-                generateContentKey(entry.collection, entry.slug),
-              ),
-            ),
+            keys,
             // When those keys were last known to match the backend — the proof
             // above is only as good as its age.
             loadedAt: Date.now(),
           }),
         );
       });
+    }
 
     // The key set on its own, from the one call that lists the open workflow
     // branches. Deliberately leaves `ids` alone: that flag means "the entries
@@ -116,7 +130,7 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
           'isPersisting',
         ]);
         map.updateIn(['pages', 'ids'], List(), list =>
-          list.push(action.payload!.entry.get('slug')),
+          (list as List<string>).push(action.payload!.entry.get('slug')),
         );
         // The entry this session just put into review is in the workflow, so
         // the key set says so without a round trip. `loadedAt` is deliberately
@@ -124,12 +138,21 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
         // the staleness clock without asking the backend would let a
         // colleague's draft go unnoticed for another full window — the exact
         // failure the window bounds.
+        //
+        // Keyed on payload.slug, the slug the backend committed under, and not
+        // on the entry's own. A new entry's draft has no slug until persist
+        // computes one, so the entry here would key it `<collection>/` — and
+        // loadUnpublishedEntry, called with the real slug immediately after,
+        // would not find it and would take its absence as proof the entry is
+        // published.
         map.updateIn(['pages', 'keys'], List(), list => {
-          const key = generateContentKey(
-            action.payload!.collection,
-            action.payload!.entry.get('slug'),
-          );
-          return list.includes(key) ? list : list.push(key);
+          const slug = action.payload!.slug || action.payload!.entry.get('slug');
+          const keys = list as List<string>;
+          if (!slug) {
+            return keys;
+          }
+          const key = generateContentKey(action.payload!.collection, slug);
+          return keys.includes(key) ? keys : keys.push(key);
         });
       });
 
@@ -180,7 +203,7 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
         map.deleteIn(['entities', `${action.payload!.collection}.${action.payload!.slug}`]);
         map.updateIn(['pages', 'keys'], List(), list => {
           const key = generateContentKey(action.payload!.collection, action.payload!.slug);
-          return list.filter((existing: string) => existing !== key);
+          return (list as List<string>).filter(existing => existing !== key);
         });
       });
 

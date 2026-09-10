@@ -122,7 +122,7 @@ export function prepareSlug(slug: string) {
 
 export function getProcessSegment(
   slugConfig?: CmsSlug,
-  ignoreValues?: string[],
+  ignoreValues?: (string | undefined)[],
   preserveSlashes?: boolean,
 ) {
   return (value: string) =>
@@ -142,7 +142,9 @@ export function slugFormatter(
 ) {
   const slugTemplate = collection.get('slug') || '{{slug}}';
 
-  const identifier = entryData.getIn(keyToPathArray(selectIdentifier(collection) as string));
+  const identifier = entryData.getIn(
+    keyToPathArray(selectIdentifier(collection) as string),
+  ) as string;
   if (!identifier) {
     throw new Error(
       'Collection must have a field name that is a valid entry identifier, or must have `identifier_field` set',
@@ -282,7 +284,7 @@ export function folderFormatter(
       entry as unknown as Map<string, unknown>,
       selectInferredField(collection, 'date'),
     ) || null;
-  const identifier = fields.getIn(keyToPathArray(selectIdentifier(collection) as string));
+  const identifier = fields.getIn(keyToPathArray(selectIdentifier(collection) as string)) as string;
   const processSegment = getProcessSegment(slugConfig, [defaultFolder, fields.get('dirname')]);
 
   const mediaFolder = compileStringTemplate(
@@ -320,10 +322,20 @@ export function entryPreviewPath(
 
   try {
     const url = previewUrlFormatter(SENTINEL, collection, slug, entry, slugConfig);
-    if (!url || !url.startsWith(SENTINEL)) {
+    if (!url) {
       return undefined;
     }
-    const path = url.slice(SENTINEL.length);
+    // Compared as parsed origins rather than as a string prefix. The prefix
+    // form is safe only because previewUrlFormatter joins with an unconditional
+    // `/`; without that, `${SENTINEL}.example.com/x` would satisfy startsWith
+    // while naming a different host, and the caller joins whatever comes back
+    // to a real deploy host. Origins do not depend on that distant detail
+    // holding, and CodeQL flags the prefix form for the same reason.
+    const parsed = new URL(url);
+    if (parsed.origin !== new URL(SENTINEL).origin) {
+      return undefined;
+    }
+    const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
     return path && path !== '/' ? path : undefined;
   } catch {
     // A malformed template must not cost the editor their save notification.
