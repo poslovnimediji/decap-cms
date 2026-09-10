@@ -80,11 +80,24 @@ export class BunnyFileManager {
   }
 
   /**
-   * Delete a file or directory
+   * Delete a file inside `path`.
+   *
+   * Takes the directory and the object name separately, and joins them with
+   * exactly the same expression `uploadFile` uses, deliberately: the storage
+   * API addresses objects relative to the storage zone, but the LIST response
+   * reports each entry's `Path` as zone-QUALIFIED (`/cmt-sites/`). Callers
+   * that built a delete target out of the listing therefore sent
+   * `/cmt-sites/photo.jpg`, the adapter prefixed the zone a second time, and
+   * every delete came back `404 Object Not Found` — silently, since the widget
+   * only surfaced it as an error banner and never removed the tile.
+   *
+   * Keeping the join here means upload and delete cannot disagree about it
+   * again; a caller passes a directory and a name, never a pre-built path.
    */
-  async deleteFile(filePath: string): Promise<void> {
+  async deleteFile(path: string, fileName: string): Promise<void> {
+    const fullPath = `${path}/${fileName}`.replace(/\/+/g, '/');
     try {
-      await this.client.deleteFile(filePath);
+      await this.client.deleteFile(fullPath);
     } catch (error) {
       console.error('Error deleting file:', error);
       throw error;

@@ -27,7 +27,8 @@ interface FileGridProps {
   selectedFiles: Set<string>;
   onSelectFile: (fileUrl: string) => void;
   onDoubleClick: (file: AddressedMediaFile) => void;
-  onDelete: (filePath: string) => void;
+  /** Receives the object name only; the widget joins it with the current path. */
+  onDelete: (objectName: string) => void;
   allowMultiple?: boolean;
 }
 
@@ -108,7 +109,7 @@ export function FileGrid({
                   visible={isHovered}
                   onClick={e => {
                     e.stopPropagation();
-                    onDelete(`${file.Path}${file.ObjectName}`);
+                    onDelete(file.ObjectName);
                   }}
                   title="Delete file"
                 >

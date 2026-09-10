@@ -217,19 +217,26 @@ export function BunnyWidget({
     }
   }
 
-  async function handleDeleteFile(filePath: string) {
+  async function handleDeleteFile(objectName: string) {
     if (!fileManagerRef.current) return;
     if (!window.confirm('Are you sure you want to delete this file?')) return;
 
+    // Captured before the delete, because `selectedFiles` holds public URLs
+    // while this function is handed an object name — dropping the name from
+    // that set removed nothing, so a deleted file could stay selected and be
+    // inserted into an entry.
+    const deletedUrl = files.find(f => f.ObjectName === objectName)?.publicUrl;
+
     try {
       setError(null);
-      await fileManagerRef.current.deleteFile(filePath);
+      await fileManagerRef.current.deleteFile(currentPath, objectName);
       // Reload files after deletion
       const filesData = await fileManagerRef.current.getFilesWithUrls(currentPath, imagesOnly);
       setFiles(filesData);
       setSelectedFiles(prev => {
+        if (!deletedUrl) return prev;
         const newSelected = new Set(prev);
-        newSelected.delete(filePath);
+        newSelected.delete(deletedUrl);
         return newSelected;
       });
     } catch (err) {
@@ -266,11 +273,12 @@ export function BunnyWidget({
       const filesData = await fileManagerRef.current.getFilesWithUrls(currentPath, imagesOnly);
       setFiles(filesData);
 
-      // Auto-insert if single file uploaded in single-select mode
-      if (uploadedFiles.length === 1 && !allowMultiple) {
-        onInsert(urls[0]);
-        onClose();
-      }
+      // Select the newly uploaded file(s) rather than auto-inserting, so the
+      // modal stays open and the user explicitly confirms with "Insert".
+      // Closing on upload made the common case — upload several images, then
+      // pick one — impossible, and silently inserted a file the editor had
+      // not chosen yet. Matches the S3 widget.
+      setSelectedFiles(new Set(urls));
     } catch (err) {
       setError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
