@@ -400,7 +400,13 @@ export const StyledDeleteButton = styled.button<{ visible?: boolean }>`
   padding: 0;
 
   &:hover {
-    background-color: rgba(255, 0, 0, 0.1);
+    /* Tint toward red, but stay opaque. This used to be
+       rgba(255, 0, 0, 0.1) — 10% red, i.e. all but transparent — which
+       REPLACED the resting white backing, so on hover the icon lost its
+       backdrop and sat directly on the thumbnail, hardest to see at exactly
+       the moment the user is aiming at it. */
+    background-color: ${designTokens.colors.error};
+    color: ${designTokens.colors.errorText};
   }
 `;
 
