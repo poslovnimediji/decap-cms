@@ -20,14 +20,9 @@ interface Props {
 
 type Entry = {
   toastId: Id;
-  /** What was last rendered, so an unchanged notification is left alone. */
-  signature: string;
-  /**
-   * The queued dismissal, if any. Held rather than merely flagged because an
-   * update may need to CANCEL it: a notification created with a timeout and
-   * later updated to be held open (a save that turns into a failed build)
-   * would otherwise still vanish on the timer armed for the first message.
-   */
+  /** What was last rendered; immer keeps unchanged objects, so identity is the change check. */
+  notification: Notification;
+  /** Held so an update can cancel it, e.g. a timed toast later held open. */
   dismissTimer: ReturnType<typeof setTimeout> | null;
   /** The timeout that timer was armed for, so an unchanged one is left alone. */
   dismissAfter: number | false | undefined;
@@ -41,16 +36,6 @@ type Translate = ReturnType<typeof useTranslate>;
 
 function translateMessage(message: Notification['message'], t: Translate) {
   return typeof message === 'string' ? message : t(message.key, { ...message });
-}
-
-/**
- * Two notifications with the same signature would produce the same toast, so
- * only a change here is worth a `toast.update` — without it every unrelated
- * dispatch would re-render and restart every toast on screen.
- */
-function signatureOf(notification: Notification) {
-  const { message, type, dismissAfter, link, spinner } = notification;
-  return JSON.stringify({ message, type, dismissAfter, link, spinner });
 }
 
 function renderNotification(notification: Notification, t: Translate): ReactNode {
@@ -112,7 +97,7 @@ function Notifications({ notifications }: Props) {
 
         const entry: Entry = {
           toastId,
-          signature: signatureOf(notification),
+          notification,
           dismissTimer: null,
           dismissAfter: undefined,
         };
@@ -126,12 +111,11 @@ function Notifications({ notifications }: Props) {
     // through a single toast rather than stacking one per stage.
     notifications.forEach(notification => {
       const entry = idMap[notification.id];
-      const signature = signatureOf(notification);
-      if (!entry || entry.signature === signature) {
+      if (!entry || entry.notification === notification) {
         return;
       }
 
-      entry.signature = signature;
+      entry.notification = notification;
       toast.update(entry.toastId, {
         render: renderNotification(notification, t),
         type: notification.type,

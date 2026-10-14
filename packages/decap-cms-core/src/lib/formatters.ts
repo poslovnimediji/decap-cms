@@ -169,6 +169,69 @@ export function slugFormatter(
   }
 }
 
+/** Upper bound on a generated slug in UTF-8 bytes, so slug + extension fits NAME_MAX. */
+export const MAX_SLUG_BYTES = 200;
+
+/** GitHub refs may be 255 bytes, `refs/heads/` included. */
+const MAX_BRANCH_BYTES = 255 - 'refs/heads/'.length;
+
+/** Below this, a slug stops being useful; only an absurd config gets here. */
+const MIN_SLUG_BYTES = 32;
+
+function codePointBytes(char: string) {
+  const codePoint = char.codePointAt(0) as number;
+  if (codePoint < 0x80) return 1;
+  if (codePoint < 0x800) return 2;
+  if (codePoint < 0x10000) return 3;
+  return 4;
+}
+
+export function utf8ByteLength(str: string) {
+  return Array.from(str).reduce((total, char) => total + codePointBytes(char), 0);
+}
+
+/**
+ * How many bytes a newly generated slug may take. The workflow branch
+ * `cms/<collection>/<slug>` is parsed back into its parts, so the slug must fit.
+ */
+export function slugByteBudget(collection: Collection, config?: CmsConfig) {
+  const repo = config?.backend?.open_authoring ? config.backend.repo : undefined;
+  const branchPrefix = ['cms', repo, collection.get('name')].filter(Boolean).join('/') + '/';
+  const budget = Math.min(MAX_SLUG_BYTES, MAX_BRANCH_BYTES - utf8ByteLength(branchPrefix));
+  return Math.max(budget, MIN_SLUG_BYTES);
+}
+
+/**
+ * Cut a slug down to `maxBytes` of UTF-8 on a code point, then drop the
+ * separators the cut left at the end: a ref may not end in `/` or `.`.
+ */
+export function truncateSlug(slug: string, maxBytes: number, slugConfig?: CmsSlug) {
+  if (utf8ByteLength(slug) <= maxBytes) {
+    return slug;
+  }
+
+  let bytes = 0;
+  const kept: string[] = [];
+  for (const char of Array.from(slug)) {
+    bytes += codePointBytes(char);
+    if (bytes > maxBytes) break;
+    kept.push(char);
+  }
+
+  const replacement = slugConfig?.sanitize_replacement;
+  let truncated = kept.join('');
+  let previous;
+  do {
+    previous = truncated;
+    truncated = truncated.replace(/[\s\-_./]+$/u, '');
+    if (replacement && truncated.endsWith(replacement)) {
+      truncated = truncated.slice(0, -replacement.length);
+    }
+  } while (truncated !== previous);
+
+  return truncated;
+}
+
 export function previewUrlFormatter(
   baseUrl: string,
   collection: Collection,
@@ -299,17 +362,9 @@ export function folderFormatter(
 }
 
 /**
- * Where an entry will live on the built site, as a path — `/blog/my-post/`.
- *
- * Same template as deploy preview links, so a collection's `preview_path`
- * means one thing across the CMS. A path rather than a URL because the caller
- * may not know the host yet: the deploy that carries a change knows its own,
- * and on a branch-published site that is not the one in `site_url`. See
- * actions/deployStatus.ts.
- *
- * Returns undefined when the collection configures no `preview_path`: the
- * formatter then hands back the base unchanged, and a link to the site root
- * dressed up as a link to the entry is worse than a plain site link.
+ * Where an entry will live on the built site, as a path (`/blog/my-post/`), so
+ * whichever deploy carries the change can supply its own host. Undefined
+ * without a `preview_path`, rather than a site-root link posing as the entry.
  */
 export function entryPreviewPath(
   collection: Collection,
@@ -325,12 +380,8 @@ export function entryPreviewPath(
     if (!url) {
       return undefined;
     }
-    // Compared as parsed origins rather than as a string prefix. The prefix
-    // form is safe only because previewUrlFormatter joins with an unconditional
-    // `/`; without that, `${SENTINEL}.example.com/x` would satisfy startsWith
-    // while naming a different host, and the caller joins whatever comes back
-    // to a real deploy host. Origins do not depend on that distant detail
-    // holding, and CodeQL flags the prefix form for the same reason.
+    // Compared as parsed origins, not a string prefix: `${SENTINEL}.example.com`
+    // would pass startsWith while naming another host. CodeQL flags the prefix form.
     const parsed = new URL(url);
     if (parsed.origin !== new URL(SENTINEL).origin) {
       return undefined;

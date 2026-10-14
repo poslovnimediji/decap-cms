@@ -3,6 +3,47 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.9.1](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.9.0...decap-cms-lib-util@3.9.1) (2026-10-14)
+
+### Performance Improvements
+
+- drop duplicate and unused code from the decap-cms bundle ([#8032](https://github.com/decaporg/decap-cms/issues/8032)) ([f051103](https://github.com/decaporg/decap-cms/commit/f05110384a14d27fd76d358dc1850d11254355b9))
+
+# [3.9.0](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.9.0-beta.4...decap-cms-lib-util@3.9.0) (2026-10-14)
+
+**Note:** Version bump only for package decap-cms-lib-util
+
+# [3.9.0-beta.4](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.9.0-beta.2...decap-cms-lib-util@3.9.0-beta.4) (2026-10-13)
+
+### Bug Fixes
+
+- **turbo-github,turbo-gitlab:** send site_id on login and drop the GraphQL deep import ([c779d90](https://github.com/decaporg/decap-cms/commit/c779d90b180efa2dd2a03755766b563d23c33008))
+
+# [3.9.0-beta.3](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.9.0-beta.2...decap-cms-lib-util@3.9.0-beta.3) (2026-10-12)
+
+### Bug Fixes
+
+- **turbo-github,turbo-gitlab:** send site_id on login and drop the GraphQL deep import ([c779d90](https://github.com/decaporg/decap-cms/commit/c779d90b180efa2dd2a03755766b563d23c33008))
+
+# [3.9.0-beta.2](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.9.0-beta.1...decap-cms-lib-util@3.9.0-beta.2) (2026-10-08)
+
+### Bug Fixes
+
+- **core:** stop a failed workflow load from retrying on every render ([20c99e0](https://github.com/decaporg/decap-cms/commit/20c99e0c443feb3a2dba23fd10c657f54e58dc0e))
+- **turbo:** make the editor bridge opt-in ([3983a1a](https://github.com/decaporg/decap-cms/commit/3983a1a775fe469ac29313ed6bf34a0b3c1c4217))
+
+### Features
+
+- **core:** editor API, field actions and the Turbo editor bridge ([2884f29](https://github.com/decaporg/decap-cms/commit/2884f29fc2e72661b98b24d0f126ed5b2a6db311))
+
+# [3.9.0-beta.1](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.9.0-beta.0...decap-cms-lib-util@3.9.0-beta.1) (2026-09-22)
+
+**Note:** Version bump only for package decap-cms-lib-util
+
+## [3.8.3](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.8.2...decap-cms-lib-util@3.8.3) (2026-09-22)
+
+**Note:** Version bump only for package decap-cms-lib-util
+
 # [3.9.0-beta.0](https://github.com/decaporg/decap-cms/compare/decap-cms-lib-util@3.8.2...decap-cms-lib-util@3.9.0-beta.0) (2026-09-10)
 
 ### Bug Fixes

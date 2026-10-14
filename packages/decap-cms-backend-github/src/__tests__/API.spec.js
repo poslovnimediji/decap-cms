@@ -1,4 +1,5 @@
 import { Base64 } from 'js-base64';
+import { formatNoteBody } from 'decap-cms-lib-util';
 
 import API from '../API';
 
@@ -18,6 +19,101 @@ describe('github API', () => {
         : Promise.reject(new Error(`No response for path '${normalizedPath}'`));
     });
   }
+
+  describe('notes issues', () => {
+    function notesIssue(number, key, extra = {}) {
+      return {
+        number,
+        body: `This issue tracks notes for entry: \`${key}\`\n\n---`,
+        labels: [{ name: 'decap-cms-notes' }],
+        ...extra,
+      };
+    }
+
+    it('finds the entry issue by listing labelled issues, never by search', async () => {
+      const api = new API({ branch: 'main', repo: 'owner/repo' });
+      const requests = [];
+      mockAPI(api, {
+        '/repos/owner/repo/issues': options => {
+          requests.push(options.params);
+          return [
+            notesIssue(1, 'posts/foo-bar'),
+            notesIssue(2, 'posts/foo', { pull_request: {} }),
+            notesIssue(3, 'posts/foo'),
+          ];
+        },
+      });
+
+      const issue = await api.findEntryIssue('posts', 'foo');
+
+      expect(issue.number).toBe(3);
+      expect(requests).toEqual([
+        { labels: 'decap-cms-notes,collection:posts', state: 'all', per_page: 100, page: 1 },
+      ]);
+      expect(api.request).not.toHaveBeenCalledWith('/search/issues', expect.anything());
+    });
+
+    it('pages until a short page', async () => {
+      const api = new API({ branch: 'main', repo: 'owner/repo' });
+      const fullPage = Array.from({ length: 100 }, (_, i) => notesIssue(i + 10, `posts/p${i}`));
+      mockAPI(api, {
+        '/repos/owner/repo/issues': ({ params }) =>
+          params.page === 1 ? fullPage : [notesIssue(500, 'posts/late')],
+      });
+
+      const issue = await api.findEntryIssue('posts', 'late');
+
+      expect(issue.number).toBe(500);
+      expect(api.request).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops paging after 20 pages of a host that keeps answering full pages', async () => {
+      const api = new API({ branch: 'main', repo: 'owner/repo' });
+      const fullPage = Array.from({ length: 100 }, (_, i) => notesIssue(i + 10, `posts/p${i}`));
+      mockAPI(api, { '/repos/owner/repo/issues': () => fullPage });
+
+      expect(await api.findEntryIssue('posts', 'missing')).toBeNull();
+      expect(api.request).toHaveBeenCalledTimes(20);
+    });
+
+    it('lists every collection when asked for all entries with notes', async () => {
+      const api = new API({ branch: 'main', repo: 'owner/repo' });
+      const requests = [];
+      mockAPI(api, {
+        '/repos/owner/repo/issues': options => {
+          requests.push(options.params);
+          return [notesIssue(1, 'posts/foo'), notesIssue(2, 'authors/bar')];
+        },
+      });
+
+      const entries = await api.getEntriesWithNotes();
+
+      expect(entries.map(entry => entry.collection)).toEqual(['posts', 'authors']);
+      expect(requests[0].labels).toBe('decap-cms-notes');
+    });
+
+    it('closes only an open issue on publish', async () => {
+      const api = new API({ branch: 'main', repo: 'owner/repo' });
+      let patched = null;
+      mockAPI(api, {
+        '/repos/owner/repo/issues': ({ params }) => {
+          expect(params.state).toBe('open');
+          return [notesIssue(7, 'posts/foo')];
+        },
+        '/repos/owner/repo/issues/7': req => {
+          patched = JSON.parse(req.body);
+          return {};
+        },
+      });
+
+      await api.closeIssueOnPublish('posts', 'foo');
+
+      expect(patched).toEqual({
+        state: 'closed',
+        labels: ['decap-cms-notes', 'entry-published'],
+      });
+    });
+  });
 
   describe('editorialWorkflowGit', () => {
     it('should create PR with correct base branch name when publishing with editorial workflow', () => {
@@ -921,5 +1017,77 @@ describe('github API', () => {
     expect(api.getBranchPullRequest).toHaveBeenCalledWith('cms/collection/slug');
     expect(api.request).toHaveBeenCalledTimes(1);
     expect(api.request).toHaveBeenCalledWith(`/repos/repo/commits/${sha}/status`);
+  });
+
+  describe('parseCommentToNote', () => {
+    // The body encoding itself is lib-util's (see notesFormat.spec); what is
+    // GitHub's is how a comment maps onto a note when the marker is silent.
+    function api() {
+      return new API({ repo: 'owner/repo' });
+    }
+
+    function asComment(body) {
+      return {
+        id: 7,
+        body,
+        user: { login: 'decap-turbo[bot]', avatar_url: 'https://avatar' },
+        created_at: '2026-01-01T00:00:00Z',
+      };
+    }
+
+    it('falls back to the comment account when the note records no author', () => {
+      const note = api().parseCommentToNote(asComment('just a comment'));
+
+      expect(note.author).toBe('decap-turbo[bot]');
+      expect(note.authorId).toBeUndefined();
+      expect(note.avatarUrl).toBe('https://avatar');
+      expect(note.content).toBe('just a comment');
+    });
+
+    it('prefers the recorded author, and drops the poster avatar with it', () => {
+      // A recorded author means the account that posted is not the person, so
+      // its avatar would mislabel the note. The pane shows initials instead.
+      const body = formatNoteBody({
+        content: 'hello',
+        resolved: false,
+        author: 'Decap Tester',
+        authorId: 'u-1',
+      });
+
+      const note = api().parseCommentToNote(asComment(body));
+
+      expect(note.author).toBe('Decap Tester');
+      expect(note.authorId).toBe('u-1');
+      expect(note.avatarUrl).toBeUndefined();
+    });
+
+    it('rejects a note whose body is only the marker', () => {
+      expect(() =>
+        api().parseCommentToNote(asComment('<!-- DecapCMS Note {"resolved":false} -->\n   ')),
+      ).toThrow('Empty note content');
+    });
+
+    it('rejects a malformed comment', () => {
+      expect(() => api().parseCommentToNote({ id: 1 })).toThrow('Invalid comment structure');
+    });
+  });
+
+  describe('getEntryNotes', () => {
+    it('skips a marker-only comment instead of blanking the whole thread', async () => {
+      const api = new API({ repo: 'owner/repo' });
+      const user = { login: 'ada', avatar_url: 'https://avatar' };
+
+      api.findEntryIssue = jest.fn().mockResolvedValue({ number: 3, html_url: 'https://issue' });
+      api.requestAllPages = jest.fn().mockResolvedValue([
+        { id: 1, body: 'first', user, created_at: '2026-01-01T00:00:00Z' },
+        { id: 2, body: '<!-- DecapCMS Note {"resolved":false} -->\n', user, created_at: '' },
+        { id: 3, body: 'third', user, created_at: '2026-01-03T00:00:00Z' },
+      ]);
+
+      const notes = await api.getEntryNotes('posts', 'my-post');
+
+      expect(notes.map(note => note.id)).toEqual(['1', '3']);
+      expect(notes[0].issueUrl).toBe('https://issue');
+    });
   });
 });

@@ -624,11 +624,7 @@ export type Entries = StaticallyTypedRecord<{
   viewStyle: string;
 }>;
 
-/**
- * The editorial-workflow `pages` slice. Deliberately not `PagesObject`, which
- * is keyed by collection and describes the entries reducer: this one is a
- * single flat record for the whole workflow.
- */
+/** The editorial-workflow `pages` slice: one flat record, unlike `PagesObject`. */
 export type WorkflowPagesObject = {
   isFetching?: boolean;
   page?: number;
@@ -636,8 +632,6 @@ export type WorkflowPagesObject = {
   ids?: List<string>;
   /** `collection/slug` for every entry under editorial workflow. */
   keys?: List<string>;
-  /** When `keys` was last confirmed against the backend. */
-  loadedAt?: number;
 };
 
 export type WorkflowPages = StaticallyTypedRecord<WorkflowPagesObject>;
@@ -653,14 +647,16 @@ export type EntryObject = {
   slug: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  i18n?: any;
+  /** Locales whose file was found when the entry was loaded (multi-file i18n). */
+  i18nLocales?: List<string>;
   collection: string;
   mediaFiles: List<MediaFileMap>;
   newRecord: boolean;
   author?: string;
   updatedOn?: string;
   status: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  i18n: any;
   meta: StaticallyTypedRecord<{ path?: string; path_type?: string }>;
 };
 

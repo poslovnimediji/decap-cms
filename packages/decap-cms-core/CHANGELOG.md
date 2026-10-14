@@ -3,6 +3,53 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.20.1](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.20.0...decap-cms-core@3.20.1) (2026-10-14)
+
+**Note:** Version bump only for package decap-cms-core
+
+# [3.20.0](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.20.0-beta.4...decap-cms-core@3.20.0) (2026-10-14)
+
+**Note:** Version bump only for package decap-cms-core
+
+# [3.20.0-beta.4](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.20.0-beta.2...decap-cms-core@3.20.0-beta.4) (2026-10-13)
+
+### Bug Fixes
+
+- **core:** hide create, delete and publish on view-only collections ([915b0be](https://github.com/decaporg/decap-cms/commit/915b0bec8660ce1421a0b184ac698d2d59cdc8a0))
+- **core:** search body only on backends that search it, and other GA fixes ([e57639b](https://github.com/decaporg/decap-cms/commit/e57639bcd7f91a3541cd95280dd0125ec13ecc9e))
+
+# [3.20.0-beta.3](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.20.0-beta.2...decap-cms-core@3.20.0-beta.3) (2026-10-12)
+
+### Bug Fixes
+
+- **core:** hide create, delete and publish on view-only collections ([915b0be](https://github.com/decaporg/decap-cms/commit/915b0bec8660ce1421a0b184ac698d2d59cdc8a0))
+- **core:** search body only on backends that search it, and other GA fixes ([e57639b](https://github.com/decaporg/decap-cms/commit/e57639bcd7f91a3541cd95280dd0125ec13ecc9e))
+
+# [3.20.0-beta.2](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.20.0-beta.1...decap-cms-core@3.20.0-beta.2) (2026-10-08)
+
+### Bug Fixes
+
+- **core:** keep field actions from re-rendering every field ([b98ac09](https://github.com/decaporg/decap-cms/commit/b98ac09d6ee41c29eb0237959352b37be42ab28e)), closes [#7793](https://github.com/decaporg/decap-cms/issues/7793)
+- **core:** keep generated slugs and i18n deletes within what git accepts ([9752f3c](https://github.com/decaporg/decap-cms/commit/9752f3c662fabd2e7ddcb74782c5c3fb37b957ef))
+- **core:** stop a failed workflow load from retrying on every render ([20c99e0](https://github.com/decaporg/decap-cms/commit/20c99e0c443feb3a2dba23fd10c657f54e58dc0e))
+- **turbo:** end a dead session once instead of failing every request ([ef2cefa](https://github.com/decaporg/decap-cms/commit/ef2cefaead2c043c5594a6f3cafd2d1b79649972))
+- **turbo:** make the editor bridge opt-in ([3983a1a](https://github.com/decaporg/decap-cms/commit/3983a1a775fe469ac29313ed6bf34a0b3c1c4217))
+- **turbo:** stop CMS tabs and the dashboard logging each other out ([fbb445d](https://github.com/decaporg/decap-cms/commit/fbb445dd39be3a97f10b7bde059ca85d478dfa7c))
+
+### Features
+
+- **core:** editor API, field actions and the Turbo editor bridge ([2884f29](https://github.com/decaporg/decap-cms/commit/2884f29fc2e72661b98b24d0f126ed5b2a6db311))
+
+# [3.20.0-beta.1](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.20.0-beta.0...decap-cms-core@3.20.0-beta.1) (2026-09-22)
+
+### Features
+
+- attribute Turbo notes to signed-in editor and fix github issue lookup ([2414aca](https://github.com/decaporg/decap-cms/commit/2414aca6e024ad8e3d417ac7b547491592cca66e))
+
+## [3.19.1](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.19.0...decap-cms-core@3.19.1) (2026-09-22)
+
+**Note:** Version bump only for package decap-cms-core
+
 # [3.20.0-beta.0](https://github.com/decaporg/decap-cms/compare/decap-cms-core@3.19.0...decap-cms-core@3.20.0-beta.0) (2026-09-10)
 
 ### Bug Fixes

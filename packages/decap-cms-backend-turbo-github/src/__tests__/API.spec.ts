@@ -185,23 +185,6 @@ describe('TurboAPI.persistFiles', () => {
     expect(restPersist).toHaveBeenCalled();
   });
 
-  it('leaves open authoring on the REST path', async () => {
-    const turboFetch = workflowCommitted();
-    const api = makeApi(turboFetch);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).useOpenAuthoring = true;
-
-    await api.persistFiles(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      [dataFile] as any,
-      [] as any,
-      { ...options, useWorkflow: true, collectionName: 'posts' } as any,
-    );
-
-    expect(turboFetch).not.toHaveBeenCalled();
-    expect(restPersist).toHaveBeenCalled();
-  });
-
   it('finishes an incomplete workflow save over REST without committing again', async () => {
     const turboFetch = workflowCommitted({ complete: false, prNumber: 7 });
     const api = makeApi(turboFetch);

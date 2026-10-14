@@ -42,8 +42,15 @@ import {
 } from './reducers/collections';
 import { createEntry } from './valueObjects/Entry';
 import { sanitizeChar } from './lib/urlHelper';
-import { getBackend, invokeEvent } from './lib/registry';
-import { commitMessageFormatter, slugFormatter, previewUrlFormatter } from './lib/formatters';
+import { getBackend, getEditorApi, invokeEvent, registerFieldAction } from './lib/registry';
+import {
+  commitMessageFormatter,
+  slugFormatter,
+  previewUrlFormatter,
+  slugByteBudget,
+  truncateSlug,
+  utf8ByteLength,
+} from './lib/formatters';
 import { isIndexFile } from './lib/indexFileHelper';
 import { status } from './constants/publishModes';
 import { FOLDER, FILES } from './constants/collectionTypes';
@@ -53,7 +60,7 @@ import {
   getI18nFiles,
   hasI18n,
   getFilePath,
-  getExistingFilePaths,
+  getI18nFilesToDelete,
   getI18nEntry,
   groupEntries,
   getI18nDataFiles,
@@ -300,7 +307,22 @@ interface PersistArgs {
 interface ImplementationInitOptions {
   useWorkflow: boolean;
   updateUserCredentials: (credentials: Credentials) => void;
+  retrieveUserCredentials: () => Credentials | null;
   initialWorkflowStatus: string;
+  /** A session gone for good mid-session: core logs out and shows `message` once. */
+  onSessionInvalid: (message: string) => void;
+}
+
+type SessionInvalidListener = (message: string) => void;
+// An array, not a Set: `Set` in this module is Immutable's.
+let sessionInvalidListeners: SessionInvalidListener[] = [];
+
+/** The backend is built outside React and Redux, so the app subscribes here. */
+export function subscribeToSessionInvalid(listener: SessionInvalidListener) {
+  sessionInvalidListeners.push(listener);
+  return () => {
+    sessionInvalidListeners = sessionInvalidListeners.filter(l => l !== listener);
+  };
 }
 
 type Implementation = BackendImplementation & {
@@ -397,22 +419,9 @@ function collectionRegex(collection: Collection): RegExp | undefined {
 }
 
 /**
- * The same selector as `collectionRegex`, for the locales it deliberately
- * leaves out.
- *
- * A collection list only ever wants one file per entry, so `collectionRegex`
- * narrows to the default locale. The EDITOR wants all of them: with
- * `structure: multiple_files` it reads `slug.en.md`, `slug.de.md` and
- * `slug.si.md` as separate files. Backends that maintain a cache keyed on the
- * collection selector therefore cache the default locale and miss every
- * sibling, so each non-default locale falls back to the origin on every entry
- * open — through Turbo's proxy, a tree read plus a blob read per locale.
- *
- * Built from the same `i18nRulestring` with the locale substituted, so the two
- * selectors cannot drift into disagreeing about the repository layout.
- *
- * Undefined when there is nothing extra to select: no i18n, a single file
- * holding every locale, or only the default locale configured.
+ * The same selector as `collectionRegex`, for the i18n locales it leaves out,
+ * so a caching backend can warm them for the editor. Built from the same rule
+ * string so the two cannot drift; undefined when there is nothing extra.
  */
 function localeSiblingRegex(collection: Collection): RegExp | undefined {
   if (!hasI18n(collection)) {
@@ -440,7 +449,7 @@ function localeSiblingRegex(collection: Collection): RegExp | undefined {
   return ruleString ? new RegExp(ruleString) : undefined;
 }
 
-function safeEntryLabel(collection: Collection, entry: EntryMap) {
+export function safeEntryLabel(collection: Collection, entry: EntryMap) {
   try {
     return selectEntryCollectionTitle(collection, entry);
   } catch {
@@ -476,7 +485,10 @@ export class Backend {
     this.implementation = implementation.init(this.config, {
       useWorkflow: selectUseWorkflow(this.config),
       updateUserCredentials: this.updateUserCredentials,
+      retrieveUserCredentials: this.retrieveUserCredentials,
       initialWorkflowStatus: status.first(),
+      onSessionInvalid: (message: string) =>
+        sessionInvalidListeners.forEach(listener => listener(message)),
     });
     this.backendName = backendName;
     this.authStore = authStore;
@@ -487,6 +499,17 @@ export class Backend {
 
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('storage', this.handleAuthStorageSync);
+    }
+
+    // Optional, duck-typed: a backend that works with the open entry (the
+    // Decap Turbo editor bridge) receives the editor API and the field-action
+    // registry here, so it needs no dependency on decap-cms-core.
+    const editor = getEditorApi();
+    const attachable = this.implementation as Implementation & {
+      attachEditor?: (options: { editor: unknown; registerFieldAction: unknown }) => void;
+    };
+    if (editor && typeof attachable.attachEditor === 'function') {
+      attachable.attachEditor({ editor, registerFieldAction });
     }
   }
 
@@ -540,6 +563,12 @@ export class Backend {
     }
   };
 
+  /** The stored user as it is now: another tab may have rotated single-use tokens. */
+  retrieveUserCredentials = (): Credentials | null => {
+    const storedUser = this.authStore?.retrieve();
+    return storedUser && storedUser.backendName === this.backendName ? storedUser : null;
+  };
+
   authComponent() {
     return this.implementation.authComponent();
   }
@@ -583,11 +612,8 @@ export class Backend {
 
     if (unpublishedEntry) return unpublishedEntry;
 
-    // For multiple_files/multiple_folders i18n the entry does not live at
-    // `path` itself but at the localised variants of it, so probing `path`
-    // always misses — and a miss here licenses reusing the slug, which
-    // overwrites the existing entry's files. The default locale is written for
-    // every entry, so one probe still answers the question.
+    // With multiple_files/multiple_folders i18n `path` itself always misses,
+    // and a miss reuses the slug and overwrites; probe the default locale.
     let entryPath = path;
     if (hasI18n(collection)) {
       const { structure, defaultLocale } = getI18nInfo(collection) as I18nInfo;
@@ -602,15 +628,10 @@ export class Backend {
 
     const publishedEntry = await this.implementation
       .getEntry(entryPath)
-      // A backend that resolves nothing is saying "no such entry"; only a
-      // rejection is ambiguous.
       .then(result => result?.data)
       .catch((error: Error & { status?: number }) => {
-        // A 404 is the only answer that means "absent". Anything else means we
-        // could not tell, and both available answers are wrong: "absent" lets
-        // the caller reuse a slug that is taken and overwrite live content,
-        // while "present" spins generateUniqueSlug's loop forever. Fail the
-        // save instead — the editor retries, rather than losing an entry.
+        // Only a 404 means "absent"; anything else fails the save rather than
+        // reuse a taken slug. Backends that swallow read errors never get here.
         if (error?.status === 404) {
           return false;
         }
@@ -629,10 +650,14 @@ export class Backend {
   ) {
     const slugConfig = config.slug;
     let slug: string;
+    // Capped in bytes, not characters: refs are limited to 255 bytes. Not for a
+    // custom path, which must keep matching the path the editor typed.
+    let maxBytes = Infinity;
     if (customPath) {
       slug = slugFromCustomPath(collection, customPath);
     } else {
-      slug = slugFormatter(collection, entryData, slugConfig);
+      maxBytes = slugByteBudget(collection, config);
+      slug = truncateSlug(slugFormatter(collection, entryData, slugConfig), maxBytes, slugConfig);
     }
     let i = 1;
     let uniqueSlug = slug;
@@ -647,7 +672,13 @@ export class Backend {
         selectUseWorkflow(config),
       ))
     ) {
-      uniqueSlug = `${slug}${sanitizeChar(' ', slugConfig)}${i++}`;
+      // The suffix stays whole; the slug in front of it gives way to the cap.
+      const suffix = `${sanitizeChar(' ', slugConfig)}${i++}`;
+      const base =
+        maxBytes === Infinity
+          ? slug
+          : truncateSlug(slug, maxBytes - utf8ByteLength(suffix), slugConfig);
+      uniqueSlug = `${base}${suffix}`;
     }
     return uniqueSlug;
   }
@@ -764,9 +795,14 @@ export class Backend {
     return [];
   }
 
-  async addNote(collection: string, slug: string, note: Omit<Note, 'id'>): Promise<Note> {
+  async addNote(
+    collection: string,
+    slug: string,
+    note: Omit<Note, 'id'>,
+    entryTitle?: string,
+  ): Promise<Note> {
     if (typeof this.implementation.addNote === 'function') {
-      return this.implementation.addNote(collection, slug, note);
+      return this.implementation.addNote(collection, slug, note, entryTitle);
     }
 
     throw new Error(`Backend '${this.backendName}' does not support adding notes`);
@@ -870,9 +906,7 @@ export class Backend {
           depth,
           collectionRegex(collection),
           searchTerm,
-          // The locales this listing leaves out. A caching backend can warm
-          // them here so the editor does not read each one from the origin on
-          // every entry open; a backend without a cache ignores it.
+          // The locales this listing leaves out, for a caching backend to warm.
           localeSiblingRegex(collection),
         )
         .then(entries => this.processEntries(entries, collection));
@@ -894,6 +928,7 @@ export class Backend {
     // collection, load it, search, and call onCollectionResults with
     // its results.
     const errors: Error[] = [];
+    const searchesEntryBody = this.implementation.searchesEntryBody === true;
     const collectionEntriesRequests = collections
       .map(async collection => {
         const summary = collection.get('summary', '') as string;
@@ -921,8 +956,13 @@ export class Backend {
               }
               return elem;
             }),
-            'body',
           ];
+          // fuzzy.filter is subsequence matching, so a long body matches almost
+          // any short term. A backend that already matched the body
+          // server-side opts in so this pass does not drop its hits.
+          if (searchesEntryBody) {
+            searchFields.push('body');
+          }
         }
         const filteredSearchFields = searchFields.filter(Boolean) as string[];
         const collectionEntries = await this.listAllEntries(collection, searchTerm);
@@ -1258,16 +1298,8 @@ export class Backend {
   }
 
   /**
-   * The content keys (`collection/slug`) of every entry under editorial
-   * workflow, and nothing else about them.
-   *
-   * This is the cheap half of `unpublishedEntries`: the same single call that
-   * lists the open workflow branches, without the per-entry hydration that
-   * follows it there. Callers that only need to know WHICH entries are in the
-   * workflow — rather than render them — should use this: hydrating a draft
-   * costs a pull request lookup, a diff and a blob read, so answering "is this
-   * slug in the workflow" from the full load scales the cost with the number
-   * of open drafts for an answer that never needed their contents.
+   * The content keys of every entry under editorial workflow: the one call
+   * that lists the workflow branches, without hydrating each draft.
    */
   async unpublishedContentKeys(): Promise<string[]> {
     return this.implementation.unpublishedEntries!();
@@ -1519,16 +1551,8 @@ export class Backend {
       collectionName,
       useWorkflow,
       hasSubfolders,
-      // The entry's title as the CMS displays it — the same value the "your
-      // change is live" notification uses. Backends that record deploys store
-      // it against the commit so a colleague's save reads as an entry rather
-      // than a bare sha; every other backend ignores it. The commit message
-      // cannot stand in: it carries the slug and is template-configurable.
-      //
-      // Guarded because this now runs on every save for every backend, and
-      // the title lookup walks entry data that a preSave event handler may
-      // have replaced with a shape it does not expect. A missing label costs
-      // a column on one page; a throw here would cost the save.
+      // The entry's title, for backends that record deploys. Guarded: a preSave
+      // handler may have reshaped the data, and a throw here would cost the save.
       entryLabel: safeEntryLabel(collection, entryDraft.get('entry')),
       entryPath: path,
       ...updatedOptions,
@@ -1602,6 +1626,20 @@ export class Backend {
     return this.implementation.persistMedia(file, options);
   }
 
+  /**
+   * Whether a locale file exists, for deleteEntry. GitHub resolves a missing
+   * file as empty content, so the content is checked; a non-404 failure counts
+   * as "exists", since skipping a real file would orphan a translation.
+   */
+  private async i18nFileExists(path: string) {
+    try {
+      const { data } = await this.implementation.getEntry(path);
+      return !!data;
+    } catch (error) {
+      return (error as { status?: number })?.status !== 404;
+    }
+  }
+
   async deleteEntry(state: State, collection: Collection, slug: string) {
     const config = state.config;
     const path = selectEntryPath(collection, slug) as string;
@@ -1630,10 +1668,12 @@ export class Backend {
     await this.invokePreUnpublishEvent(entry);
     let paths = [path];
     if (hasI18n(collection)) {
-      // Only delete the locale files the entry was actually loaded from. Asking GitHub to
-      // delete a path that is not in the tree fails the whole commit with
-      // `GitRPC::BadObjectState`, which is what a partially translated entry used to hit.
-      paths = getExistingFilePaths(collection, extension, path, slug, entry);
+      // Only the locales that exist: deleting a missing path fails the commit.
+      const files = getI18nFilesToDelete(collection, extension, path, slug, entry);
+      const exists = await Promise.all(
+        files.map(file => file.known || this.i18nFileExists(file.path)),
+      );
+      paths = files.filter((_, i) => exists[i]).map(file => file.path);
     }
     await this.implementation.deleteFiles(paths, commitMessage);
 

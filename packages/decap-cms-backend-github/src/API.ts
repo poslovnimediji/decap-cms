@@ -9,6 +9,9 @@ import trim from 'lodash/trim';
 import { oneLine } from 'common-tags';
 import { dirname } from 'path';
 import {
+  formatNoteBody,
+  commentToNote,
+  commentsToNotes,
   getAllResponses,
   APIError,
   EditorialWorkflowError,
@@ -900,21 +903,15 @@ export default class API {
       );
       branches = branchesWithFilter.filter(b => b.filter).map(b => b.branch);
     } else {
-      // One fetch, two filters. `getPullRequests` re-requests the list for
-      // each predicate, and both calls here pass the same `head`/`state`, so
-      // the two below issued a byte-identical
-      // `GET /pulls?base=…&state=open&per_page=100` on every collection load —
-      // 2.0s + 1.8s of it when the request goes through a proxy. The predicate
-      // is applied client-side anyway, so the page only needs fetching once.
+      // One fetch, two filters: `getPullRequests` re-requests the list per
+      // predicate, and the predicate is applied client-side anyway.
       const openPullRequests = await this.getPullRequests(
         undefined,
         PullRequestState.Open,
         () => true,
       );
 
-      // Backwards compatibility: entries created before the CMS labelled its
-      // pull requests. Effectively always empty on a repo that has only ever
-      // been edited by a current CMS.
+      // Backwards compatibility: entries from before the CMS labelled its PRs.
       const unlabeled = openPullRequests.filter(
         pr => !pr.head.repo.fork && withoutCmsLabel(pr, this.cmsLabelPrefix),
       );
@@ -932,9 +929,7 @@ export default class API {
         await this.migratePullRequest(pr, `${prCount} of ${unlabeled.length}`);
       }
 
-      // Migration is what puts the label on, so when it ran the list has to be
-      // read again — the page fetched above predates those labels. Conditional
-      // rather than unconditional precisely because that path is the rare one.
+      // Migration adds the labels, so when it ran the list must be read again.
       const cmsPullRequests = unlabeled.length
         ? await this.getPullRequests(undefined, PullRequestState.Open, pr =>
             withCmsLabel(pr, this.cmsLabelPrefix),
@@ -1586,52 +1581,16 @@ export default class API {
   }
 
   /**
-   * Constants for note formatting to aid with PR comment to note conversion
+   * How a notes issue is recognised on the host.
    */
-  private static readonly NOTE_STATUS_RESOLVED = 'RESOLVED';
-  private static readonly NOTE_STATUS_OPEN = 'OPEN';
-  private static readonly NOTES_LABEL = 'decap-cms-notes';
-  private static readonly NOTE_ISSUE_PREFIX = 'Notes: ';
-  // In Github we hide Decap Notes metadata in a HTML comment, that way we can track status of whether or not a note has been resolved (similar to GDocs)
-  private static readonly NOTE_REGEX =
-    /^<!-- DecapCMS Note - Status: (RESOLVED|OPEN) -->([\s\S]+)$/;
-
-  /**
-   * Format a note for PR comment display
-   */
-  private formatNoteForGithub(note: Note): string {
-    const status = note.resolved ? API.NOTE_STATUS_RESOLVED : API.NOTE_STATUS_OPEN;
-
-    return `<!-- DecapCMS Note - Status: ${status} -->
-${note.content}`;
-  }
+  static readonly NOTES_LABEL = 'decap-cms-notes';
+  static readonly NOTE_ISSUE_PREFIX = 'Notes: ';
 
   /**
    * Parse a GitHub comment into a Note object
    */
-  parseCommentToNote(comment: GitHubIssue): Note {
-    if (!comment || !comment.body || !comment.user) {
-      throw new Error('Invalid comment structure');
-    }
-
-    const structuredMatch = comment.body.match(API.NOTE_REGEX);
-
-    const content = structuredMatch ? structuredMatch[2].trim() : comment.body;
-    const resolved = structuredMatch ? structuredMatch[1] === API.NOTE_STATUS_RESOLVED : false;
-
-    if (!content.trim()) {
-      throw new Error('Empty note content');
-    }
-
-    return {
-      id: comment.id.toString(),
-      author: comment.user.login,
-      avatarUrl: comment.user.avatar_url,
-      timestamp: comment.created_at,
-      content,
-      resolved,
-      entrySlug: '',
-    };
+  parseCommentToNote(comment: CommentData): Note {
+    return commentToNote(comment);
   }
 
   /**
@@ -1658,23 +1617,52 @@ ${note.content}`;
   }
 
   /**
+   * List the repo's notes issues by label, not `/search/issues`, which with an
+   * App installation token intermittently answers 422 and so lost notes. With
+   * `collectionName`, also narrowed by the `collection:` label.
+   */
+  private async listNotesIssues(
+    state: 'open' | 'all',
+    collectionName?: string,
+  ): Promise<GitHubIssue[]> {
+    const labels = collectionName
+      ? `${API.NOTES_LABEL},collection:${collectionName}`
+      : API.NOTES_LABEL;
+    // Paged by number: requestAllPages follows the Link header, which the Turbo
+    // proxy does not forward. Capped so a lookup cannot run indefinitely.
+    const perPage = 100;
+    const maxPages = 20;
+    const issues: (GitHubIssue & { pull_request?: unknown })[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const batch: (GitHubIssue & { pull_request?: unknown })[] = await this.request(
+        `${this.repoURL}/issues`,
+        { params: { labels, state, per_page: perPage, page } },
+      );
+      issues.push(...batch);
+      if (batch.length < perPage) break;
+    }
+    return issues.filter(issue => !issue.pull_request);
+  }
+
+  private async findNotesIssue(
+    collectionName: string,
+    slug: string,
+    state: 'open' | 'all',
+  ): Promise<GitHubIssue | null> {
+    // With the backticks, so `posts/foo` does not match `posts/foo-bar`.
+    const marker = `\`${collectionName}/${slug}\``;
+    const issues = await this.listNotesIssues(state, collectionName);
+    return issues.find(issue => issue.body?.includes(marker)) ?? null;
+  }
+
+  /**
    * Find existing issue for an entry (returns null if not found)
    */
   async findEntryIssue(collectionName: string, slug: string): Promise<GitHubIssue | null> {
-    // Search for existing issue
-    const searchQuery = `repo:${this.repo} label:${API.NOTES_LABEL} "${collectionName}/${slug}" in:body`;
-
     try {
-      const searchResponse = await this.request('/search/issues', {
-        params: { q: searchQuery },
-      });
-
-      if (searchResponse.items && searchResponse.items.length > 0) {
-        return searchResponse.items[0];
-      }
-      return null;
+      return await this.findNotesIssue(collectionName, slug, 'all');
     } catch (error) {
-      console.warn('Failed to search for existing notes issue:', error);
+      console.warn('Failed to look up existing notes issue:', error);
       return null;
     }
   }
@@ -1690,15 +1678,14 @@ ${note.content}`;
     | { status: 200; data: IssueState; etag: string | null }
   > {
     try {
-      const headers: Record<string, string> = {
-        Authorization: `${this.tokenKeyword} ${this.token}`,
-      };
+      // Raw fetch because `request` parses the body and drops the ETag header.
+      // Still built through urlFor/requestHeaders so subclasses can scope it to
+      // their own proxy; hand-building the URL and auth header breaks them.
+      const headers: Record<string, string> = await this.requestHeaders(
+        etag ? { 'If-None-Match': etag } : {},
+      );
 
-      if (etag) {
-        headers['If-None-Match'] = etag;
-      }
-
-      const response = await fetch(`${this.apiRoot}${this.repoURL}/issues/${issueNumber}`, {
+      const response = await fetch(this.urlFor(`${this.repoURL}/issues/${issueNumber}`, {}), {
         headers,
       });
 
@@ -1710,11 +1697,7 @@ ${note.content}`;
         const issue = await response.json();
         const newETag = response.headers.get('ETag');
 
-        const commentsResponse = await fetch(
-          `${this.apiRoot}${this.repoURL}/issues/${issueNumber}/comments`,
-          { headers },
-        );
-        const commentsRaw: GitHubIssue[] = await commentsResponse.json();
+        const commentsRaw = await this.getIssueComments(issueNumber);
 
         const comments: CommentData[] = commentsRaw.map(comment => ({
           id: comment.id,
@@ -1764,16 +1747,23 @@ ${note.content}`;
   /**
    * Get comments from a GitHub issue
    */
+  /**
+   * Paged, because this endpoint defaults to 30 per page - a thread past that
+   * silently lost its older notes, in the pane and in polling alike.
+   *
+   * Errors propagate deliberately. Returning an empty list on a failed request
+   * is indistinguishable from a thread whose comments were all deleted: the
+   * polling manager would diff against it, emit `comment_deleted` for every
+   * note and blank the pane, then restore them on the next poll. Throwing
+   * leaves the manager's last state alone and lets it retry.
+   */
   private async getIssueComments(issueNumber: number): Promise<GitHubIssue[]> {
-    try {
-      const response: GitHubIssue[] = await this.request(
-        `${this.repoURL}/issues/${issueNumber}/comments`,
-      );
-      return Array.isArray(response) ? response : [];
-    } catch (error) {
-      console.error('Failed to get issue comments:', error);
-      return [];
-    }
+    const response = await this.requestAllPages<GitHubIssue>(
+      `${this.repoURL}/issues/${issueNumber}/comments`,
+      { params: { per_page: 100 } },
+    );
+
+    return Array.isArray(response) ? response : [];
   }
 
   /**
@@ -1786,7 +1776,7 @@ ${note.content}`;
         {
           method: 'POST',
           body: JSON.stringify({
-            body: this.formatNoteForGithub(note),
+            body: formatNoteBody(note),
           }),
         },
       );
@@ -1806,7 +1796,7 @@ ${note.content}`;
       await this.request(`${this.repoURL}/issues/comments/${commentId}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          body: this.formatNoteForGithub(note),
+          body: formatNoteBody(note),
         }),
       });
     } catch (error) {
@@ -1834,13 +1824,8 @@ ${note.content}`;
    */
   async closeIssueOnPublish(collectionName: string, slug: string): Promise<void> {
     try {
-      const searchQuery = `repo:${this.repo} label:${API.NOTES_LABEL} "${collectionName}/${slug}" in:body state:open`;
-      const searchResponse = await this.request('/search/issues', {
-        params: { q: searchQuery },
-      });
-
-      if (searchResponse.items && searchResponse.items.length > 0) {
-        const issue = searchResponse.items[0];
+      const issue = await this.findNotesIssue(collectionName, slug, 'open');
+      if (issue) {
         await this.request(`${this.repoURL}/issues/${issue.number}`, {
           method: 'PATCH',
           body: JSON.stringify({
@@ -1862,13 +1847,8 @@ ${note.content}`;
    */
   async reopenIssueOnUnpublish(collectionName: string, slug: string): Promise<void> {
     try {
-      const searchQuery = `repo:${this.repo} label:${API.NOTES_LABEL} "${collectionName}/${slug}" in:body`;
-      const searchResponse = await this.request('/search/issues', {
-        params: { q: searchQuery },
-      });
-
-      if (searchResponse.items && searchResponse.items.length > 0) {
-        const issue = searchResponse.items[0];
+      const issue = await this.findNotesIssue(collectionName, slug, 'all');
+      if (issue) {
         // Remove 'entry-published' or 'entry-deleted' labels and reopen
         const updatedLabels = (issue.labels || [])
           .map((l: { name: string }) => l.name)
@@ -1899,11 +1879,8 @@ ${note.content}`;
       const comments = await this.getIssueComments(issue.number);
       const issueUrl = issue.html_url; // Get the issue URL once
 
-      // Add issueUrl to each note
-      return comments.map(comment => ({
-        ...this.parseCommentToNote(comment),
-        issueUrl, // Add the issue URL to each note (this info is picked up by the UI to direct users to the source of the Notes in Github)
-      }));
+      // Add issueUrl to each note (this info is picked up by the UI to direct users to the source of the Notes in Github)
+      return commentsToNotes(comments, issueUrl, comment => this.parseCommentToNote(comment));
     } catch (error) {
       console.error('Failed to get entry notes:', error);
       return [];
@@ -1960,14 +1937,11 @@ ${note.content}`;
     Array<{ collection: string; slug: string; noteCount: number }>
   > {
     try {
-      const searchQuery = `repo:${this.repo} label:${API.NOTES_LABEL} state:open`;
-      const searchResponse = await this.request('/search/issues', {
-        params: { q: searchQuery, per_page: 100 },
-      });
+      const issues = await this.listNotesIssues('open');
 
       const entriesWithNotes = [];
 
-      for (const issue of searchResponse.items || []) {
+      for (const issue of issues) {
         // Extract collection/slug from issue body
         const match = issue.body.match(/entry: `(.+)\/(.+)`/);
         if (match) {
@@ -1992,13 +1966,8 @@ ${note.content}`;
    */
   async closeEntryNotesIssue(collectionName: string, slug: string): Promise<void> {
     try {
-      const searchQuery = `repo:${this.repo} label:${API.NOTES_LABEL} "${collectionName}/${slug}" in:body state:open`;
-      const searchResponse = await this.request('/search/issues', {
-        params: { q: searchQuery },
-      });
-
-      if (searchResponse.items && searchResponse.items.length > 0) {
-        const issue = searchResponse.items[0];
+      const issue = await this.findNotesIssue(collectionName, slug, 'open');
+      if (issue) {
         await this.request(`${this.repoURL}/issues/${issue.number}`, {
           method: 'PATCH',
           body: JSON.stringify({

@@ -13,7 +13,7 @@ import {
 } from '../reducers/collections';
 import { selectIntegration, selectPublishedSlugs } from '../reducers';
 import { getIntegrationProvider } from '../integrations';
-import { currentBackend } from '../backend';
+import { currentBackend, safeEntryLabel } from '../backend';
 import { serializeValues } from '../lib/serializeEntryValues';
 import { createEntry } from '../valueObjects/Entry';
 import { createAssetProxy } from '../valueObjects/AssetProxy';
@@ -87,6 +87,8 @@ export const DRAFT_CREATE_FROM_ENTRY = 'DRAFT_CREATE_FROM_ENTRY';
 export const DRAFT_CREATE_EMPTY = 'DRAFT_CREATE_EMPTY';
 export const DRAFT_DISCARD = 'DRAFT_DISCARD';
 export const DRAFT_CHANGE_FIELD = 'DRAFT_CHANGE_FIELD';
+export const DRAFT_FIELDS_EXTERNALLY_CHANGED = 'DRAFT_FIELDS_EXTERNALLY_CHANGED';
+export const DRAFT_CLEAR_FIELD_HIGHLIGHTS = 'DRAFT_CLEAR_FIELD_HIGHLIGHTS';
 export const DRAFT_VALIDATION_ERRORS = 'DRAFT_VALIDATION_ERRORS';
 export const DRAFT_CLEAR_ERRORS = 'DRAFT_CLEAR_ERRORS';
 export const DRAFT_LOCAL_BACKUP_RETRIEVED = 'DRAFT_LOCAL_BACKUP_RETRIEVED';
@@ -460,6 +462,19 @@ export function changeDraftField({
     type: DRAFT_CHANGE_FIELD,
     payload: { field, value, metadata, entries, i18n },
   };
+}
+
+/**
+ * Fields changed from outside the editor (lib/editorApi.ts): remount their
+ * controls so widgets that only read their value on mount (the markdown and
+ * richtext editors) show it, and highlight them until clearFieldHighlights.
+ */
+export function markFieldsExternallyChanged(names: string[]) {
+  return { type: DRAFT_FIELDS_EXTERNALLY_CHANGED, payload: { names } };
+}
+
+export function clearFieldHighlights(names: string[]) {
+  return { type: DRAFT_CLEAR_FIELD_HIGHLIGHTS, payload: { names } };
 }
 
 export function changeDraftFieldValidation(
@@ -1003,38 +1018,20 @@ export function persistEntry(collection: Collection) {
         usedSlugs,
       })
       .then(async (newSlug: string) => {
-        // "Entry saved" plus, where the backend can report one, a later
-        // notification when a deploy carries this change live — see
-        // actions/deployStatus.ts and §A4b. Falls back to exactly the previous
-        // toast when it cannot. The title is passed so that notification can
-        // name the entry rather than its path.
+        // Both arguments are guarded: the entry is already committed, so a
+        // preSave handler that reshaped the data must not fail the save.
         dispatch(
           notifyEntrySaved(
-            selectEntryCollectionTitle(collection, serializedEntry),
+            safeEntryLabel(collection, serializedEntry),
             entryPreviewPath(collection, newSlug, serializedEntry, state.config.slug),
           ),
         );
 
-        /**
-         * Release the editor as soon as the entry is committed.
-         *
-         * `entryPersisted` is what clears `isPersisting` — the save button's
-         * spinner and the unsaved-changes guard. It used to be dispatched
-         * *after* the media-library reload below, so saving an entry with
-         * images held the editor busy through a refresh of a panel that isn't
-         * even on screen. A save felt as slow as its slowest follow-up rather
-         * than as slow as the write itself.
-         *
-         * Everything after this point is a background refresh of views the
-         * editor is not waiting on.
-         */
+        // Release the editor as soon as the entry is committed: everything
+        // after this is a background refresh the editor is not waiting on.
         dispatch(entryPersisted(collection, serializedEntry, newSlug));
 
-        // Deliberately not awaited, for the same reason. loadMedia already
-        // handles its own failures internally (it dispatches mediaLoadFailed
-        // rather than rejecting); the catch is there so that if it ever does
-        // reject, it surfaces as a logged error rather than an unhandled
-        // rejection — and never as a failed save, because the save succeeded.
+        // Not awaited; a rejection is logged, never reported as a failed save.
         if (assetProxies.length > 0) {
           Promise.resolve(dispatch(loadMedia())).catch(error => {
             console.error('Failed to reload the media library after saving', error);
@@ -1276,6 +1273,10 @@ export function startNotesPolling(collection: Collection, slug: string) {
 
       const callbacks = {
         onUpdate: (notes: Note[], changes: IssueChange[]) => {
+          if (getState().entryDraft?.getIn(['entry', 'slug']) !== slug) {
+            return;
+          }
+
           dispatch(notesUpdatedFromPolling(collection, slug, notes, changes));
           dispatch(loadNotesForEntry(notes));
         },
@@ -1337,10 +1338,21 @@ export function refreshNotesNow(collection: Collection, slug: string) {
 
 export function persistNote(collection: Collection, slug: string, note: Omit<Note, 'id'>) {
   return async (dispatch: ThunkDispatch<State, {}, AnyAction>, getState: () => State) => {
-    const backend = currentBackend(getState().config);
+    const state = getState();
+    const backend = currentBackend(state.config);
+    // Named off the open draft rather than fetched: this runs from the editor,
+    // so the entry is already in hand, and `selectEntryCollectionTitle` is the
+    // same thing the collection list shows — it honours a `summary` template,
+    // a files collection's label, and an inferred title field, none of which a
+    // backend reading the raw file can work out for itself.
+    const draftEntry = state.entryDraft?.get('entry');
+    const entryTitle =
+      draftEntry && draftEntry.get('slug') === slug
+        ? selectEntryCollectionTitle(collection, draftEntry)
+        : undefined;
     dispatch(notePersisting(collection, slug, note as Note));
     try {
-      const savedNote = await backend.addNote(collection.get('name'), slug, note);
+      const savedNote = await backend.addNote(collection.get('name'), slug, note, entryTitle);
       dispatch(notePersisted(collection, slug, savedNote));
       dispatch(addNote(savedNote));
       dispatch(

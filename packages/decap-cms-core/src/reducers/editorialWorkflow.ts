@@ -26,6 +26,11 @@ import { CONFIG_SUCCESS } from '../actions/config';
 
 import type { EditorialWorkflowAction, EditorialWorkflow, Entities } from '../types/redux';
 
+function unionKeys(state: Map<unknown, unknown>, fetchedKeys: List<string>) {
+  const previousKeys = (state.getIn(['pages', 'keys']) as List<string>) || List<string>();
+  return fetchedKeys.concat(previousKeys.filter(key => !fetchedKeys.includes(key)));
+}
+
 function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
   switch (action.type) {
     case CONFIG_SUCCESS: {
@@ -52,25 +57,19 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
       );
 
     case UNPUBLISHED_ENTRIES_REQUEST:
-      return state.setIn(['pages', 'isFetching'], true);
+      return state.withMutations(map => {
+        map.setIn(['pages', 'isFetching'], true);
+        map.deleteIn(['pages', 'error']);
+      });
 
     case UNPUBLISHED_ENTRIES_SUCCESS: {
       const fetchedKeys = List(
         action.payload!.entries.map(entry => generateContentKey(entry.collection, entry.slug)),
       );
-      // Union, not replace. A key this session added by persisting an entry
-      // into review is not contradicted by a listing that does not mention it:
-      // the listing may have been requested before that commit landed, or
-      // served stale. Dropping it here while also stamping `loadedAt` turns
-      // "absent" into "confirmed absent", and loadUnpublishedEntry's shortcut
-      // then treats a live draft as published and loads it from the site
-      // branch, where it does not exist — "Failed to load entry: 404 File Not
-      // Found", and an editor showing "Published" for an entry still in
-      // review. Publishing and deleting prune keys explicitly, so a key that
-      // really is gone still goes; one that lingers costs a single per-slug
-      // lookup, which is the direction that fails safely.
-      const previousKeys = (state.getIn(['pages', 'keys']) as List<string>) || List<string>();
-      const keys = fetchedKeys.concat(previousKeys.filter(key => !fetchedKeys.includes(key)));
+      // Union, not replace: the listing may predate a commit this session made,
+      // and dropping its key makes loadUnpublishedEntry treat a live draft as
+      // published. Publishing and deleting prune keys explicitly.
+      const keys = unionKeys(state, fetchedKeys);
 
       return state.withMutations(map => {
         action.payload!.entries.forEach(entry =>
@@ -84,31 +83,28 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
           Map({
             ...action.payload!.pages,
             ids: List(action.payload!.entries.map(entry => entry.slug)),
-            // Which entries are under editorial workflow, collection-qualified
-            // so two collections may hold the same slug. Read by
-            // loadUnpublishedEntry, which treats "this key is absent" as proof
-            // the entry is not under editorial workflow.
+            // Collection-qualified content keys; loadUnpublishedEntry treats an
+            // absent key as proof the entry is not under editorial workflow.
             keys,
-            // When those keys were last known to match the backend — the proof
-            // above is only as good as its age.
-            loadedAt: Date.now(),
           }),
         );
       });
     }
 
-    // The key set on its own, from the one call that lists the open workflow
-    // branches. Deliberately leaves `ids` alone: that flag means "the entries
-    // themselves are loaded", which the Workflow board and the collection view
-    // both act on, and claiming it here would suppress the load they need.
+    // The key set on its own, unioned as above. Leaves `ids` alone: that means
+    // "the entries themselves are loaded", and claiming it would suppress the load.
     case UNPUBLISHED_KEYS_SUCCESS:
-      return state.withMutations(map => {
-        map.setIn(['pages', 'keys'], List(action.payload!.keys));
-        map.setIn(['pages', 'loadedAt'], Date.now());
-      });
+      return state.setIn(['pages', 'keys'], unionKeys(state, List(action.payload!.keys)));
 
-    case UNPUBLISHED_ENTRIES_FAILURE:
-      return state.setIn(['pages', 'isFetching'], false);
+    // `pages.error` stops the collection view retrying a failed load on every
+    // re-render. A new request or a success clears it.
+    case UNPUBLISHED_ENTRIES_FAILURE: {
+      const error = action.payload as unknown as Error | undefined;
+      return state.withMutations(map => {
+        map.setIn(['pages', 'isFetching'], false);
+        map.setIn(['pages', 'error'], error?.message || 'Failed to load entries');
+      });
+    }
 
     case UNPUBLISHED_ENTRY_PERSIST_REQUEST: {
       return state.setIn(
@@ -132,19 +128,8 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
         map.updateIn(['pages', 'ids'], List(), list =>
           (list as List<string>).push(action.payload!.entry.get('slug')),
         );
-        // The entry this session just put into review is in the workflow, so
-        // the key set says so without a round trip. `loadedAt` is deliberately
-        // NOT refreshed: this proves one key, not the whole set, and resetting
-        // the staleness clock without asking the backend would let a
-        // colleague's draft go unnoticed for another full window — the exact
-        // failure the window bounds.
-        //
-        // Keyed on payload.slug, the slug the backend committed under, and not
-        // on the entry's own. A new entry's draft has no slug until persist
-        // computes one, so the entry here would key it `<collection>/` — and
-        // loadUnpublishedEntry, called with the real slug immediately after,
-        // would not find it and would take its absence as proof the entry is
-        // published.
+        // Keyed on payload.slug, the slug the backend committed under: a new
+        // entry's draft has none, and `<collection>/` would read as published.
         map.updateIn(['pages', 'keys'], List(), list => {
           const slug = action.payload!.slug || action.payload!.entry.get('slug');
           const keys = list as List<string>;
@@ -193,10 +178,7 @@ function unpublishedEntries(state = Map(), action: EditorialWorkflowAction) {
         true,
       );
 
-    // Publishing and deleting both close the workflow branch, so the key has
-    // to go with the entity — otherwise loadUnpublishedEntry would keep
-    // treating the entry as a draft and ask the backend for a branch that no
-    // longer exists.
+    // Publishing and deleting close the workflow branch, so the key goes too.
     case UNPUBLISHED_ENTRY_PUBLISH_SUCCESS:
     case UNPUBLISHED_ENTRY_DELETE_SUCCESS:
       return state.withMutations(map => {

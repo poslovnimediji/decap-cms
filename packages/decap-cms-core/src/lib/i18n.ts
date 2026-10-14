@@ -129,43 +129,27 @@ export function getFilePaths(
 }
 
 /**
- * The locale files an entry was actually loaded from.
- *
- * `getFilePaths` returns a path for every configured locale, whether or not a file exists.
- * That is fine for writing, but asking a backend to delete a path that is not in the tree
- * fails the whole commit (GitHub answers `GitRPC::BadObjectState`). Probing the backend is
- * not an option either: the GitHub, Gitea and Forgejo implementations of `getEntry` resolve
- * with empty data instead of rejecting when a file is missing.
- *
- * The merged entry already knows which locales it found: `i18n` holds every locale except
- * the one the entry's own path points at. Fall back to every configured locale when the
- * entry is not in the store, which keeps the previous behaviour for unknown entries.
+ * Every file of an entry, marked by whether it is known to exist (the default
+ * locale, and locales found on load); the rest must be checked before deleting.
  */
-export function getExistingFilePaths(
+export function getI18nFilesToDelete(
   collection: Collection,
   extension: string,
   path: string,
   slug: string,
   entry?: EntryMap,
 ) {
-  const { structure, defaultLocale } = getI18nInfo(collection) as I18nInfo;
+  const { structure, locales, defaultLocale } = getI18nInfo(collection) as I18nInfo;
 
   if (structure === I18N_STRUCTURE.SINGLE_FILE) {
-    return [path];
+    return [{ path, known: true }];
   }
 
-  // Nothing loaded for this entry, so we cannot know: keep the old behaviour.
-  if (!entry) {
-    return getFilePaths(collection, extension, path, slug);
-  }
-
-  // `mergeValues` only sets `i18n` when the entry has locales beyond the one its own path
-  // points at, so an absent key means the entry exists in the default locale only.
-  const i18n = entry.get('i18n');
-  const locales = [defaultLocale, ...(i18n ? i18n.keySeq().toArray() : [])];
-  return locales.map(locale =>
-    getFilePath(structure as I18N_STRUCTURE, extension, path, slug, locale),
-  );
+  const found = entry?.get('i18nLocales');
+  return locales.map(locale => ({
+    path: getFilePath(structure as I18N_STRUCTURE, extension, path, slug, locale),
+    known: locale === defaultLocale || !!found?.includes(locale),
+  }));
 }
 
 export function normalizeFilePath(structure: I18N_STRUCTURE, path: string, locale: string) {
@@ -316,12 +300,18 @@ function mergeValues(
 
   const path = normalizeFilePath(structure, defaultEntry.value.path, defaultLocale);
   const slug = selectEntrySlug(collection, path) as string;
+  // Which locales have a file: GitHub answers a missing file with empty content,
+  // and deleteEntry must not ask to delete one, which fails the whole commit.
+  const i18nLocales = values
+    .filter(({ locale, value }) => locale === defaultEntry!.locale || value.raw !== '')
+    .map(({ locale }) => locale);
   const entryValue: EntryValue = {
     ...defaultEntry.value,
     raw: '',
     ...i18n,
     path,
     slug,
+    i18nLocales,
   };
 
   return entryValue;

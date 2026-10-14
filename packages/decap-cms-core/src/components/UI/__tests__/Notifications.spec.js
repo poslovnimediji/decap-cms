@@ -92,8 +92,7 @@ describe('Notifications', () => {
     jest.useRealTimers();
   });
 
-  // The capability §A4 needs: one toast that follows a job through its stages,
-  // rather than a new toast stacked next to it per stage.
+  // One toast follows a job through its stages instead of stacking one per stage.
   it('updates a notification in place instead of stacking a second toast', async () => {
     let notifications = [
       { id: '1', message: 'Saved · Publishing…', type: 'info', dismissAfter: false, spinner: true },
@@ -127,5 +126,41 @@ describe('Notifications', () => {
     expect(await screen.findByText('Your change is live')).toBeInTheDocument();
     expect(screen.queryByText('Saved · Publishing…')).not.toBeInTheDocument();
     expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(1);
+  });
+
+  // A failure toast carries the raw error in `details`, and an error can be
+  // cyclic (a Response in its metadata, a DOMException); serializing it threw
+  // inside the effect and unmounted the CMS on the toast meant to report it.
+  it('renders and updates a notification whose details hold a cyclic error', async () => {
+    const error = new Error('boom');
+    error.self = error;
+    const failed = {
+      id: '1',
+      message: { key: 'ui.toast.failed', details: error },
+      type: 'error',
+      dismissAfter: false,
+    };
+    let notifications = [failed];
+    const store = mockStore(() => ({ notifications: { notifications } }));
+
+    render(
+      <Provider store={store}>
+        <I18n
+          locale="en"
+          messages={{ ui: { toast: { failed: 'It failed', retried: 'Retrying' } } }}
+        >
+          <Notifications />
+        </I18n>
+      </Provider>,
+    );
+
+    expect(await screen.findByText('It failed')).toBeInTheDocument();
+
+    notifications = [{ ...failed, message: { key: 'ui.toast.retried', details: error } }];
+    act(() => {
+      store.dispatch({ type: 'REPAINT' });
+    });
+
+    expect(await screen.findByText('Retrying')).toBeInTheDocument();
   });
 });

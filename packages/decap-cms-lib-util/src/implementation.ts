@@ -69,7 +69,9 @@ export interface Note {
   avatarUrl?: string;
   content: string;
   timestamp: string;
-  author: string;
+  author: string; // not unique - do not use for comparison
+  authorId?: string; // unique note author id; absent when the poster IS the author
+  isOwn?: boolean; // whether signed-in editor wrote this note
   entrySlug: string;
   resolved: boolean;
   issueUrl?: string;
@@ -177,6 +179,8 @@ export type Config = {
     turbo_config_url?: string;
     supabase_app_id?: string;
     supabase_anon_key?: string;
+    /** Decap Turbo, experimental: set true to turn on the editor bridge (AI agents setting fields in the open entry). Off by default. */
+    editor_bridge?: boolean;
   };
   auth: {
     use_oidc?: boolean;
@@ -221,7 +225,12 @@ export interface Implementation {
   deleteFiles: (paths: string[], commitMessage: string) => Promise<void>;
 
   getNotes?: (collection: string, slug: string) => Promise<Note[]>;
-  addNote?: (collection: string, slug: string, note: Omit<Note, 'id'>) => Promise<Note>;
+  addNote?: (
+    collection: string,
+    slug: string,
+    note: Omit<Note, 'id'>,
+    entryTitle?: string,
+  ) => Promise<Note>;
   updateNote?: (
     collection: string,
     slug: string,
@@ -287,6 +296,12 @@ export interface Implementation {
      */
     localeSiblingRegex?: RegExp,
   ) => Promise<ImplementationEntry[]>;
+  /**
+   * True when `allEntriesByFolder` already matched `searchTerm` against entry
+   * bodies, so core's own search pass may include the body without changing
+   * results on backends that only search the listed fields.
+   */
+  searchesEntryBody?: boolean;
   traverseCursor?: (
     cursor: Cursor,
     action: string,

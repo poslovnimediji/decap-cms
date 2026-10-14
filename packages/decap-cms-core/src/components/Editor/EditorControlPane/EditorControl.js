@@ -7,16 +7,19 @@ import { ClassNames, Global, css as coreCss } from '@emotion/react';
 import styled from '@emotion/styled';
 import partial from 'lodash/partial';
 import uniqueId from 'lodash/uniqueId';
+import memoize from 'lodash/memoize';
 import { connect } from 'react-redux';
 import { FieldLabel, colors, transitions, lengths, borders } from 'decap-cms-ui-default';
 import ReactMarkdown from 'react-markdown';
 import gfm from 'remark-gfm';
 
 import { resolveWidget, getEditorComponents } from '../../../lib/registry';
+import { editorApi } from '../../../lib/editorApi';
 import { clearFieldErrors, tryLoadEntry, validateMetaField } from '../../../actions/entries';
-import { addAsset, boundGetAsset } from '../../../actions/media';
+import { addAsset, getAsset } from '../../../actions/media';
 import { selectIsLoadingAsset } from '../../../reducers/medias';
 import { query, clearSearch } from '../../../actions/search';
+import { store } from '../../../redux';
 import {
   openMediaLibrary,
   removeInsertedMedia,
@@ -77,6 +80,29 @@ const ControlContainer = styled.div`
   }
 `;
 
+const FieldActions = styled.div`
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+`;
+
+const FieldActionButton = styled.button`
+  border: 0;
+  border-radius: ${lengths.borderRadius};
+  background: ${colors.textFieldBorder};
+  color: ${colors.controlLabel};
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: ${colors.active};
+    color: ${colors.textLight};
+  }
+`;
+
 const ControlTopbar = styled.div`
   display: flex;
   justify-content: space-between;
@@ -121,6 +147,39 @@ function LabelComponent({ field, isActive, hasErrors, uniqueFieldId, isFieldOpti
   return labelComponent;
 }
 
+function FieldActionBar({ field, collection, locale, actions }) {
+  // Plain values only, so an extension never depends on Immutable internals.
+  const context = {
+    field: field.toJS(),
+    collection: collection?.get('name'),
+    locale,
+    // A getter, so only an action that reads the entry pays to convert it.
+    get entry() {
+      return editorApi.getCurrentEntry();
+    },
+    applyFieldPatch: editorApi.applyFieldPatch,
+  };
+  const available = actions.filter(action => !action.isAvailable || action.isAvailable(context));
+  if (available.length === 0) {
+    return null;
+  }
+
+  return (
+    <FieldActions>
+      {available.map(action => (
+        <FieldActionButton
+          key={action.id}
+          type="button"
+          title={action.title || action.label}
+          onClick={() => action.onClick(context)}
+        >
+          {action.label}
+        </FieldActionButton>
+      ))}
+    </FieldActions>
+  );
+}
+
 class EditorControl extends Component {
   static propTypes = {
     value: PropTypes.oneOfType([
@@ -147,14 +206,16 @@ class EditorControl extends Component {
     clearSearch: PropTypes.func.isRequired,
     clearFieldErrors: PropTypes.func.isRequired,
     loadEntry: PropTypes.func.isRequired,
+    getEntry: PropTypes.func.isRequired,
     t: PropTypes.func.isRequired,
     isEditorComponent: PropTypes.bool,
     isNewEditorComponent: PropTypes.bool,
     parentIds: PropTypes.arrayOf(PropTypes.string),
-    entry: ImmutablePropTypes.map.isRequired,
     collection: ImmutablePropTypes.map.isRequired,
     isDisabled: PropTypes.bool,
     isHidden: PropTypes.bool,
+    isHighlighted: PropTypes.bool,
+    fieldActions: PropTypes.array,
     isFieldDuplicate: PropTypes.func,
     isFieldHidden: PropTypes.func,
     locale: PropTypes.string,
@@ -187,10 +248,15 @@ class EditorControl extends Component {
     return false;
   };
 
+  onChange = (newValue, newMetadata) => {
+    this.props.onChange(this.props.field, newValue, newMetadata);
+    this.props.clearFieldErrors(this.uniqueFieldId); // We are deleting errors for this field only.
+  };
+
   render() {
     const {
       value,
-      entry,
+      getEntry,
       collection,
       config,
       field,
@@ -198,7 +264,6 @@ class EditorControl extends Component {
       fieldsErrors,
       mediaPaths,
       boundGetAsset,
-      onChange,
       openMediaLibrary,
       clearMediaControl,
       removeMediaControl,
@@ -218,6 +283,8 @@ class EditorControl extends Component {
       isEditorComponent,
       isNewEditorComponent,
       parentIds,
+      isHighlighted,
+      fieldActions,
       t,
       validateMetaField,
       isLoadingAsset,
@@ -249,6 +316,12 @@ class EditorControl extends Component {
             aria-label={t('editor.editorControl.field.widgetLabel', { widgetLabel: widgetName })}
             css={css`
               ${isHidden && styleStrings.hidden};
+              ${isHighlighted &&
+              `
+                border-radius: ${lengths.borderRadius};
+                box-shadow: 0 0 0 3px ${colors.active};
+              `};
+              transition: box-shadow ${transitions.main};
             `}
           >
             <ControlTopbar>
@@ -261,6 +334,14 @@ class EditorControl extends Component {
                 isFieldOptional={isFieldOptional}
                 t={t}
               />
+              {fieldActions?.length > 0 && (
+                <FieldActionBar
+                  field={field}
+                  collection={collection}
+                  locale={locale}
+                  actions={fieldActions}
+                />
+              )}
               {errors && (
                 <ControlErrorsList>
                   {errors.map(
@@ -309,7 +390,7 @@ class EditorControl extends Component {
                 ${styleStrings.labelActive};
               `}
               controlComponent={widget.control}
-              entry={entry}
+              entry={getEntry()} // This field has been deprecated and can contain stale data, do not use it in widgets
               collection={collection}
               config={config}
               field={field}
@@ -317,10 +398,7 @@ class EditorControl extends Component {
               value={value}
               mediaPaths={mediaPaths}
               metadata={metadata}
-              onChange={(newValue, newMetadata) => {
-                onChange(field, newValue, newMetadata);
-                clearFieldErrors(this.uniqueFieldId); // Видаляємо помилки лише для цього поля
-              }}
+              onChange={this.onChange}
               onValidate={onValidate && partial(onValidate, this.uniqueFieldId)}
               onOpenMediaLibrary={openMediaLibrary}
               onClearMediaControl={clearMediaControl}
@@ -339,6 +417,7 @@ class EditorControl extends Component {
               editorControl={ConnectedEditorControl}
               query={query}
               loadEntry={loadEntry}
+              getEntry={getEntry}
               queryHits={queryHits[this.uniqueFieldId] || []}
               clearSearch={clearSearch}
               clearFieldErrors={clearFieldErrors}
@@ -386,13 +465,10 @@ class EditorControl extends Component {
   }
 }
 
-function mapStateToProps(state) {
-  const { collections, entryDraft } = state;
-  const entry = entryDraft.get('entry');
-  const collection = collections.get(entryDraft.getIn(['entry', 'collection']));
-  const isLoadingAsset = selectIsLoadingAsset(state.medias);
-
-  async function loadEntry(collectionName, slug) {
+const stable = {
+  loadEntry: async function stable_loadEntry(collectionName, slug) {
+    const state = store.getState();
+    const { collections } = state;
     const targetCollection = collections.get(collectionName);
     if (targetCollection) {
       const loadedEntry = await tryLoadEntry(state, targetCollection, slug);
@@ -400,18 +476,45 @@ function mapStateToProps(state) {
     } else {
       throw new Error(`Can't find collection '${collectionName}'`);
     }
-  }
+  },
+
+  // Will return the same function instance for the same collection.
+  validateMetaField: memoize(collection => {
+    return (field, value, t) => {
+      const state = store.getState();
+      return validateMetaField(state, collection, field, value, t);
+    };
+  }),
+
+  getEntry() {
+    const state = store.getState();
+    return state.entryDraft.get('entry');
+  },
+
+  getBoundedAsset: memoize(collection => {
+    return (path, field) => {
+      const state = store.getState();
+      const entry = state.entryDraft.get('entry');
+      return store.dispatch(getAsset({ collection, entry, path, field }));
+    };
+  }),
+};
+
+function mapStateToProps(state) {
+  const { collections, entryDraft } = state;
+  const collection = collections.get(entryDraft.getIn(['entry', 'collection']));
+  const isLoadingAsset = selectIsLoadingAsset(state.medias);
 
   return {
     mediaPaths: state.mediaLibrary.get('controlMedia'),
     isFetching: state.search.isFetching,
     queryHits: state.search.queryHits,
     config: state.config,
-    entry,
     collection,
     isLoadingAsset,
-    loadEntry,
-    validateMetaField: (field, value, t) => validateMetaField(state, collection, field, value, t),
+    getEntry: stable.getEntry,
+    loadEntry: stable.loadEntry,
+    validateMetaField: stable.validateMetaField(collection),
   };
 }
 
@@ -432,7 +535,7 @@ function mapDispatchToProps(dispatch) {
   );
   return {
     ...creators,
-    boundGetAsset: (collection, entry) => boundGetAsset(dispatch, collection, entry),
+    boundGetAsset: stable.getBoundedAsset,
   };
 }
 
@@ -441,7 +544,7 @@ function mergeProps(stateProps, dispatchProps, ownProps) {
     ...stateProps,
     ...dispatchProps,
     ...ownProps,
-    boundGetAsset: dispatchProps.boundGetAsset(stateProps.collection, stateProps.entry),
+    boundGetAsset: dispatchProps.boundGetAsset(stateProps.collection),
   };
 }
 

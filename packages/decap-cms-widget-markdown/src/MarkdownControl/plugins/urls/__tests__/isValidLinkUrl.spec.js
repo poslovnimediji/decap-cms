@@ -13,7 +13,9 @@ describe('isValidLinkUrl', () => {
   });
 
   it('should reject prose pasted into the URL prompt', () => {
-    expect(isValidLinkUrl('Pobuda se uvrsti na glasovanje participativnega proračuna.')).toBe(false);
+    expect(isValidLinkUrl('Pobuda se uvrsti na glasovanje participativnega proračuna.')).toBe(
+      false,
+    );
     expect(isValidLinkUrl('https://example.com/a b')).toBe(false);
     expect(isValidLinkUrl('two words')).toBe(false);
     expect(isValidLinkUrl('has\ttab')).toBe(false);
